@@ -68,3 +68,22 @@ textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px
 .qrow { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .qrow span { flex: 1; }
 .qrow button { padding: 6px 12px; font-size: 15px; }
+/* Date box: keep it inside the card on phones */
+input[type="date"] {
+  display: block;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.2;
+  overflow: hidden;
+}
+input[type="date"]::-webkit-date-and-time-value { text-align: start; min-height: 1.2em; }
+input[type="date"]::-webkit-datetime-edit { padding: 0; }
+@media (max-width: 480px) {
+  input[type="date"] { width: 70%; height: 42px; font-size: 15px; }
+}
