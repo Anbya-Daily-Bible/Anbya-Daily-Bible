@@ -4,8 +4,8 @@ import {
   signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, increment, serverTimestamp,
-  Timestamp, collection, query, orderBy, getDocs
+  getFirestore, doc, getDoc, setDoc, updateDoc, increment,
+  collection, query, orderBy, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { START_DATE, SETS } from "./questions.js";
 
@@ -30,8 +30,6 @@ const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 const views = ["authView", "quizView", "resultView", "adminView"];
 const ar = (n) => String(Number(n));
-// Must be exactly midnight UTC on 1 Jan 2000 (matches timestamp.date(2000, 1, 1) in firestore.rules)
-const NEVER = () => Timestamp.fromMillis(Date.UTC(2000, 0, 1));
 
 let mode = "signin";
 let user = null;
@@ -104,7 +102,7 @@ $("authBtn").onclick = async () => {
       if (!isOwner(cred.user)) {
         await setDoc(doc(db, "users", cred.user.uid), {
           email: cred.user.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-          lastDay: "", lastScore: 0, lastPlay: NEVER()
+          pDay: "", pCount: 0, pScore: 0
         });
       }
     } else {
@@ -128,7 +126,7 @@ onAuthStateChanged(auth, async (u) => {
     if (!snap.exists()) {
       await setDoc(ref, {
         email: u.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-        lastDay: "", lastScore: 0, lastPlay: NEVER()
+        pDay: "", pCount: 0, pScore: 0
       });
       snap = await getDoc(ref);
     }
@@ -138,7 +136,17 @@ onAuthStateChanged(auth, async (u) => {
     data = { ambosh: 0, lastDay: "", lastScore: 0 };
   }
   today = todayStr();
-  if (data.lastDay === today) showDone(); else startQuiz();
+  if (data.pDay === today) {
+    // Continue where the child stopped (a refresh never resets answered questions)
+    set = todaysSet();
+    qi = data.pCount || 0;
+    score = data.pScore || 0;
+    if (qi >= set.qs.length) showDone(); else showQuestion();
+  } else if (data.lastDay === today) {
+    showDone();           // accounts saved by an older version of the site
+  } else {
+    startQuiz();
+  }
 });
 
 /* ---------- Daily quiz ---------- */
@@ -152,7 +160,7 @@ function showQuestion() {
   const q = set.qs[qi];
   answered = false;
   $("qCount").textContent = `Question ${qi + 1} of ${set.qs.length}`;
-  $("ambosh").textContent = ar((data.ambosh || 0) + score);
+  $("ambosh").textContent = ar(data.ambosh || 0);
   $("ref").textContent = `📖 ${set.ref}`;
   $("verse").textContent = q.q;
   $("msg").textContent = "";
@@ -169,23 +177,49 @@ function showQuestion() {
   show("quizView");
 }
 
-function pick(btn, name) {
-  if (answered) return;
+let saved = true, pendingCorrect = false;
+
+async function pick(btn, name) {
+  if (answered) return;          // each question can only be answered once
   answered = true;
   const q = set.qs[qi];
   const right = q.o[q.a];
   document.querySelectorAll(".opt").forEach((b) => { if (b.textContent === right) b.classList.add("good"); });
-  if (name === right) {
-    score++;
-    $("ambosh").textContent = ar((data.ambosh || 0) + score);
-    $("msg").textContent = "🎉 Correct! +1 Ambosh";
+  pendingCorrect = name === right;
+  if (!pendingCorrect) btn.classList.add("bad");
+  await saveAnswer();
+}
+
+// Saves this answer right away, so a refresh can never let the child answer it again
+async function saveAnswer() {
+  const m = $("msg");
+  const inc = pendingCorrect ? 1 : 0;
+  saved = false;
+  $("nextBtn").hidden = true;
+  m.textContent = "Saving...";
+  try {
+    await updateDoc(doc(db, "users", user.uid), {
+      ambosh: increment(inc), pDay: today, pCount: qi + 1, pScore: score + inc
+    });
+  } catch (e) {
+    console.error("Save failed:", e);
+    m.textContent = "Could not save (" + (e.code || "error") + "). Check your internet and try again.";
+    $("nextBtn").textContent = "Try saving again";
+    $("nextBtn").hidden = false;
+    return;
+  }
+  saved = true;
+  score += inc;
+  data.ambosh = (data.ambosh || 0) + inc;
+  data.pDay = today; data.pCount = qi + 1; data.pScore = score;
+  $("ambosh").textContent = ar(data.ambosh);
+  if (pendingCorrect) {
+    m.textContent = "🎉 Correct! +1 Ambosh";
   } else {
-    btn.classList.add("bad");
-    const m = $("msg");
     m.textContent = "Unfortunately not right. The correct answer is: ";
     const ans = document.createElement("bdi");
     ans.dir = "rtl";
-    ans.textContent = right;
+    ans.textContent = set.qs[qi].o[set.qs[qi].a];
     m.appendChild(ans);
   }
   const last = qi === set.qs.length - 1;
@@ -193,27 +227,14 @@ function pick(btn, name) {
   $("nextBtn").hidden = false;
 }
 
-$("nextBtn").onclick = async () => {
+$("nextBtn").onclick = () => {
+  if (!saved) return saveAnswer();
   if (qi < set.qs.length - 1) { qi++; return showQuestion(); }
-  // Last question: save today's score once
-  $("nextBtn").disabled = true;
-  try {
-    await updateDoc(doc(db, "users", user.uid), {
-      ambosh: increment(score), lastDay: today, lastScore: score, lastPlay: serverTimestamp()
-    });
-    data.ambosh = (data.ambosh || 0) + score;
-    data.lastDay = today;
-    data.lastScore = score;
-    showResult(true);
-  } catch (e) {
-    console.error("Save failed:", e);
-    $("msg").textContent = "Could not save (" + (e.code || "error") + "). Press again; if it keeps happening, see README → Troubleshooting.";
-  }
-  $("nextBtn").disabled = false;
+  showResult(true);
 };
 
 function showResult(justPlayed) {
-  const s = data.lastScore || 0;
+  const s = data.pDay === today ? (data.pScore || 0) : (data.lastScore || 0);
   $("trophy").textContent = s === 3 ? "🏆" : s > 0 ? "⭐" : "📖";
   $("resultTitle").textContent = justPlayed ? `You got ${s} of 3!` : "You finished today's quiz ✅";
   $("resultSub").innerHTML = (justPlayed ? `You earned ${s} Ambosh today.` : `Today's score: ${s} of 3`) +
@@ -239,7 +260,7 @@ async function loadAdmin() {
       const tr = document.createElement("tr");
       const c1 = document.createElement("td"); c1.className = "mail"; c1.textContent = u.email;
       const c2 = document.createElement("td"); c2.innerHTML = `<b>${ar(a)}</b>`;
-      const c3 = document.createElement("td"); c3.textContent = u.lastDay || "—";
+      const c3 = document.createElement("td"); c3.textContent = u.pDay || u.lastDay || "—";
       tr.append(c1, c2, c3);
       rows.appendChild(tr);
     });
