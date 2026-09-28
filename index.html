@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>اختبار أمبوش</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <p id="boot" class="sub">جارٍ التحميل...</p>
+  <script>
+    (function () {
+      var boot = document.getElementById("boot");
+      if (location.protocol === "file:") {
+        boot.innerHTML = "⚠️ لا يمكن تشغيل الصفحة بالضغط المزدوج على الملف.<br>افتحها عبر خادم محلي (مثل http://localhost:8000) أو ارفعها على Firebase Hosting. انظر README.md";
+      } else {
+        setTimeout(function () {
+          if (boot && !boot.hidden) boot.innerHTML = "⚠️ لم تبدأ الصفحة. تأكد من إعدادات Firebase في app.js، ثم اضغط F12 ← Console.";
+        }, 4000);
+      }
+    })();
+  </script>
+
+  <section id="authView" hidden>
+    <h1>📖 اختبار أمبوش</h1>
+    <p class="sub">أجب عن ٣ أسئلة كل يوم واكسب أمبوش!</p>
+    <div class="card">
+      <p id="authErr" class="err"></p>
+      <label for="email">البريد الإلكتروني</label>
+      <input id="email" type="email" dir="ltr" autocomplete="email">
+      <label for="password">كلمة المرور</label>
+      <input id="password" type="password" dir="ltr" autocomplete="current-password">
+      <button id="authBtn" class="full">تسجيل الدخول</button>
+      <p class="center"><button id="switchBtn" class="link">جديد هنا؟ أنشئ حساباً</button></p>
+    </div>
+  </section>
+
+  <section id="quizView" hidden>
+    <div class="bar">
+      <span id="qCount"></span>
+      <span class="coin">🪙 <span id="ambosh">٠</span> أمبوش</span>
+    </div>
+    <div class="card">
+      <p id="ref" class="ref"></p>
+      <p id="verse" class="verse"></p>
+      <div id="options"></div>
+      <div id="msg" class="msg"></div>
+      <button id="nextBtn" class="full" hidden></button>
+    </div>
+  </section>
+
+  <section id="resultView" hidden>
+    <div class="card">
+      <div id="trophy" class="big"></div>
+      <h1 id="resultTitle"></h1>
+      <p id="resultSub" class="sub"></p>
+    </div>
+  </section>
+
+  <section id="adminView" hidden>
+    <h1>🪙 كل الأمبوش</h1>
+    <p id="adminSub" class="sub"></p>
+    <div class="card scroll">
+      <table>
+        <thead><tr><th>البريد</th><th>أمبوش</th><th>آخر مرة</th></tr></thead>
+        <tbody id="adminRows"></tbody>
+      </table>
+    </div>
+    <p class="center"><button id="closeAdmin" class="link">رجوع</button></p>
+  </section>
+
+  <p id="footer" class="center" hidden>
+    <button id="adminBtn" class="link" hidden>المالك: عرض كل الحسابات</button>
+    <button id="signOutBtn" class="link">تسجيل الخروج</button>
+  </p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

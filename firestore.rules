@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+
+      // CHANGE THIS to your owner email (lowercase). Must match OWNER_EMAIL in app.js.
+      function isOwner() {
+        return request.auth != null
+          && request.auth.token.email.lower() == 'pierre2006hany@gmail.com';
+      }
+
+      // A child reads only their own account. The owner reads all.
+      allow read: if request.auth != null && (request.auth.uid == uid || isOwner());
+
+      // A child creates only their own account, starting at 0 Ambosh.
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.ambosh == 0
+        && request.resource.data.email == request.auth.token.email.lower()
+        && request.resource.data.lastDay == ''
+        && request.resource.data.lastPlay == timestamp.date(2000, 1, 1);
+
+      // One quiz save: add 0-3 Ambosh, and at least 6 hours after the last save.
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.lastScore is int
+        && request.resource.data.lastScore >= 0
+        && request.resource.data.lastScore <= 3
+        && request.resource.data.ambosh == resource.data.ambosh + request.resource.data.lastScore
+        && request.resource.data.lastDay is string
+        && request.resource.data.lastDay != resource.data.lastDay
+        && request.resource.data.lastPlay == request.time
+        && request.time > resource.data.lastPlay + duration.value(6, 'h');
+
+      allow delete: if false;
+    }
+  }
+}
