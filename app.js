@@ -129,6 +129,7 @@ onAuthStateChanged(auth, async (u) => {
     }
     data = snap.data();
   } catch (e) {
+    console.error("Could not load account:", e);
     data = { ambosh: 0, lastDay: "", lastScore: 0 };
   }
   today = todayStr();
@@ -176,7 +177,7 @@ function pick(btn, name) {
   } else {
     btn.classList.add("bad");
     const m = $("msg");
-    m.textContent = "Unfortunately not correct. The correct answer is: ";
+    m.textContent = "Not this time. Correct answer: ";
     const ans = document.createElement("bdi");
     ans.dir = "rtl";
     ans.textContent = right;
@@ -200,7 +201,8 @@ $("nextBtn").onclick = async () => {
     data.lastScore = score;
     showResult(true);
   } catch (e) {
-    $("msg").textContent = "Could not save. Check your internet and press again.";
+    console.error("Save failed:", e);
+    $("msg").textContent = "Could not save (" + (e.code || "error") + "). Press again; if it keeps happening, see README → Troubleshooting.";
   }
   $("nextBtn").disabled = false;
 };
