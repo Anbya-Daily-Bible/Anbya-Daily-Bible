@@ -57,3 +57,14 @@ th:not(:first-child), td:not(:first-child) { white-space: nowrap; text-align: ce
 /* Arabic questions stay right-to-left */
 .ar { direction: rtl; text-align: right; }
 .ar .opt { text-align: right; }
+
+/* Owner question editor */
+h2 { font-size: 20px; color: var(--blue-dark); margin: 6px 0 10px; }
+textarea {
+  width: 100%; font: inherit; padding: 12px 14px; margin: 6px 0 12px;
+  border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink);
+}
+textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(30,136,229,.2); }
+.qrow { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.qrow span { flex: 1; }
+.qrow button { padding: 6px 12px; font-size: 15px; }
