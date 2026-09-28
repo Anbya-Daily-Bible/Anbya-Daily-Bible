@@ -38,7 +38,6 @@ let data = null;            // the child's saved document
 let today = "";
 let set = null;             // today's quiz
 let qi = 0, score = 0, answered = false;
-let lastView = "authView";
 
 /* ---------- Helpers ---------- */
 function todayStr() {
@@ -59,12 +58,11 @@ function shuffle(a) {
   }
   return a;
 }
+const isOwner = (u) => !!(u && u.email && u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
 function show(name) {
   $("boot").hidden = true;
-  lastView = name === "adminView" ? lastView : name;
   views.forEach((v) => ($(v).hidden = v !== name));
   $("footer").hidden = name === "authView";
-  $("adminBtn").hidden = !(user && user.email && user.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
 }
 function friendlyError(e) {
   const map = {
@@ -98,10 +96,12 @@ $("authBtn").onclick = async () => {
   try {
     if (mode === "signup") {
       const cred = await createUserWithEmailAndPassword(auth, email, pw);
-      await setDoc(doc(db, "users", cred.user.uid), {
-        email: cred.user.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-        lastDay: "", lastScore: 0, lastPlay: NEVER()
-      });
+      if (!isOwner(cred.user)) {
+        await setDoc(doc(db, "users", cred.user.uid), {
+          email: cred.user.email.toLowerCase(), ambosh: 0, joined: Date.now(),
+          lastDay: "", lastScore: 0, lastPlay: NEVER()
+        });
+      }
     } else {
       await signInWithEmailAndPassword(auth, email, pw);
     }
@@ -116,6 +116,7 @@ $("signOutBtn").onclick = () => signOut(auth);
 onAuthStateChanged(auth, async (u) => {
   user = u;
   if (!u) { $("password").value = ""; renderAuth(); show("authView"); return; }
+  if (isOwner(u)) { loadAdmin(); return; }
   const ref = doc(db, "users", u.uid);
   try {
     let snap = await getDoc(ref);
@@ -209,21 +210,20 @@ function showResult(justPlayed) {
 }
 function showDone() { showResult(false); }
 
-/* ---------- Owner: see every account ---------- */
-$("adminBtn").onclick = async () => {
+/* ---------- Owner: only sees the points, gets no questions ---------- */
+async function loadAdmin() {
   const rows = $("adminRows");
   rows.innerHTML = "";
   $("adminSub").textContent = "جارٍ التحميل...";
-  const back = lastView;
   show("adminView");
-  $("closeAdmin").onclick = () => show(back === "adminView" ? "resultView" : back);
   try {
     const snap = await getDocs(query(collection(db, "users"), orderBy("ambosh", "desc")));
-    let total = 0;
+    let total = 0, count = 0;
     snap.forEach((d) => {
       const u = d.data();
+      if ((u.email || "").toLowerCase() === OWNER_EMAIL.toLowerCase()) return;
       const a = Number(u.ambosh) || 0;
-      total += a;
+      total += a; count++;
       const tr = document.createElement("tr");
       const c1 = document.createElement("td"); c1.className = "mail"; c1.textContent = u.email;
       const c2 = document.createElement("td"); c2.innerHTML = `<b>${ar(a)}</b>`;
@@ -231,10 +231,11 @@ $("adminBtn").onclick = async () => {
       tr.append(c1, c2, c3);
       rows.appendChild(tr);
     });
-    $("adminSub").textContent = `${ar(snap.size)} حساب · ${ar(total)} أمبوش في المجموع`;
+    $("adminSub").textContent = count ? `${ar(count)} حساب · ${ar(total)} أمبوش في المجموع` : "لا توجد حسابات بعد.";
   } catch (e) {
     $("adminSub").textContent = "ليس لديك صلاحية لرؤية هذه القائمة.";
   }
-};
+}
+$("refreshBtn").onclick = loadAdmin;
 
 renderAuth();
