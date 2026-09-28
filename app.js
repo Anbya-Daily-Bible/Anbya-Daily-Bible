@@ -11,17 +11,16 @@ import { START_DATE, SETS } from "./questions.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
-  apiKey: "AIzaSyBvGbibgzjZr9X9dovCG3K9yFozl4fwiPQ",
-  authDomain: "anbya-daily-bible.firebaseapp.com",
-  projectId: "anbya-daily-bible",
-  storageBucket: "anbya-daily-bible.firebasestorage.app",
-  messagingSenderId: "216663190113",
-  appId: "1:216663190113:web:67d9efd0d987209ef85820",
-  measurementId: "G-C6M39N9GPY"
+  apiKey: "PASTE_HERE",
+  authDomain: "PASTE_HERE",
+  projectId: "PASTE_HERE",
+  storageBucket: "PASTE_HERE",
+  messagingSenderId: "PASTE_HERE",
+  appId: "PASTE_HERE"
 };
 
 /* ============ 2) YOUR (OWNER) EMAIL — must match firestore.rules ============ */
-const OWNER_EMAIL = "pierre2006hany@gmail.com";
+const OWNER_EMAIL = "owner@example.com";
 /* =============================================================== */
 
 const app = initializeApp(firebaseConfig);
@@ -30,7 +29,8 @@ const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 const views = ["authView", "quizView", "resultView", "adminView"];
 const ar = (n) => String(Number(n));
-const NEVER = () => Timestamp.fromDate(new Date(2000, 0, 1));
+// Must be exactly midnight UTC on 1 Jan 2000 (matches timestamp.date(2000, 1, 1) in firestore.rules)
+const NEVER = () => Timestamp.fromMillis(Date.UTC(2000, 0, 1));
 
 let mode = "signin";
 let user = null;
