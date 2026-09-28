@@ -29,7 +29,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 const views = ["authView", "quizView", "resultView", "adminView"];
-const ar = (n) => Number(n).toLocaleString("ar-EG");
+const ar = (n) => String(Number(n));
 const NEVER = () => Timestamp.fromDate(new Date(2000, 0, 1));
 
 let mode = "signin";
@@ -66,23 +66,23 @@ function show(name) {
 }
 function friendlyError(e) {
   const map = {
-    "auth/invalid-email": "من فضلك اكتب بريداً إلكترونياً صحيحاً.",
-    "auth/missing-password": "من فضلك اكتب كلمة المرور.",
-    "auth/weak-password": "كلمة المرور لازم تكون ٦ أحرف على الأقل.",
-    "auth/email-already-in-use": "هذا البريد لديه حساب بالفعل.",
-    "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة.",
-    "auth/user-not-found": "البريد أو كلمة المرور غير صحيحة.",
-    "auth/wrong-password": "البريد أو كلمة المرور غير صحيحة.",
-    "auth/too-many-requests": "محاولات كثيرة. انتظر قليلاً."
+    "auth/invalid-email": "Please type a real email.",
+    "auth/missing-password": "Please type a password.",
+    "auth/weak-password": "Password needs at least 6 characters.",
+    "auth/email-already-in-use": "That email already has an account.",
+    "auth/invalid-credential": "Email or password is not right.",
+    "auth/user-not-found": "Email or password is not right.",
+    "auth/wrong-password": "Email or password is not right.",
+    "auth/too-many-requests": "Too many tries. Please wait a moment."
   };
-  return map[e.code] || "حدث خطأ. حاول مرة أخرى.";
+  return map[e.code] || "Something went wrong. Please try again.";
 }
 
 /* ---------- Sign in / sign up ---------- */
 function renderAuth() {
   const up = mode === "signup";
-  $("authBtn").textContent = up ? "إنشاء حسابي" : "تسجيل الدخول";
-  $("switchBtn").textContent = up ? "لدي حساب بالفعل" : "جديد هنا؟ أنشئ حساباً";
+  $("authBtn").textContent = up ? "Create my account" : "Sign in";
+  $("switchBtn").textContent = up ? "I already have an account" : "New here? Make an account";
   $("password").autocomplete = up ? "new-password" : "current-password";
   $("authErr").textContent = "";
 }
@@ -145,7 +145,7 @@ function startQuiz() {
 function showQuestion() {
   const q = set.qs[qi];
   answered = false;
-  $("qCount").textContent = `سؤال ${ar(qi + 1)} من ${ar(set.qs.length)}`;
+  $("qCount").textContent = `Question ${qi + 1} of ${set.qs.length}`;
   $("ambosh").textContent = ar((data.ambosh || 0) + score);
   $("ref").textContent = `📖 ${set.ref}`;
   $("verse").textContent = q.q;
@@ -172,13 +172,18 @@ function pick(btn, name) {
   if (name === right) {
     score++;
     $("ambosh").textContent = ar((data.ambosh || 0) + score);
-    $("msg").textContent = "🎉 إجابة صحيحة! +١ أمبوش";
+    $("msg").textContent = "🎉 Correct! +1 Ambosh";
   } else {
     btn.classList.add("bad");
-    $("msg").textContent = `ليست هذه المرة. الإجابة الصحيحة: ${right}`;
+    const m = $("msg");
+    m.textContent = "Not this time. Correct answer: ";
+    const ans = document.createElement("bdi");
+    ans.dir = "rtl";
+    ans.textContent = right;
+    m.appendChild(ans);
   }
   const last = qi === set.qs.length - 1;
-  $("nextBtn").textContent = last ? "شاهد نتيجتي" : "السؤال التالي ➜";
+  $("nextBtn").textContent = last ? "See my result" : "Next question ➜";
   $("nextBtn").hidden = false;
 }
 
@@ -195,7 +200,7 @@ $("nextBtn").onclick = async () => {
     data.lastScore = score;
     showResult(true);
   } catch (e) {
-    $("msg").textContent = "تعذر الحفظ. تأكد من الإنترنت ثم اضغط مرة أخرى.";
+    $("msg").textContent = "Could not save. Check your internet and press again.";
   }
   $("nextBtn").disabled = false;
 };
@@ -203,9 +208,9 @@ $("nextBtn").onclick = async () => {
 function showResult(justPlayed) {
   const s = data.lastScore || 0;
   $("trophy").textContent = s === 3 ? "🏆" : s > 0 ? "⭐" : "📖";
-  $("resultTitle").textContent = justPlayed ? `حصلت على ${ar(s)} من ٣!` : "لقد أنهيت اختبار اليوم ✅";
-  $("resultSub").innerHTML = (justPlayed ? `كسبت ${ar(s)} أمبوش اليوم.` : `نتيجتك اليوم: ${ar(s)} من ٣`) +
-    `<br>المجموع: <b>${ar(data.ambosh || 0)} أمبوش</b> 🪙<br>تعال غداً لأسئلة جديدة! 🌅`;
+  $("resultTitle").textContent = justPlayed ? `You got ${s} of 3!` : "You finished today's quiz ✅";
+  $("resultSub").innerHTML = (justPlayed ? `You earned ${s} Ambosh today.` : `Today's score: ${s} of 3`) +
+    `<br>Total: <b>${ar(data.ambosh || 0)} Ambosh</b> 🪙<br>Come back tomorrow for new questions! 🌅`;
   show("resultView");
 }
 function showDone() { showResult(false); }
@@ -214,7 +219,7 @@ function showDone() { showResult(false); }
 async function loadAdmin() {
   const rows = $("adminRows");
   rows.innerHTML = "";
-  $("adminSub").textContent = "جارٍ التحميل...";
+  $("adminSub").textContent = "Loading...";
   show("adminView");
   try {
     const snap = await getDocs(query(collection(db, "users"), orderBy("ambosh", "desc")));
@@ -231,9 +236,9 @@ async function loadAdmin() {
       tr.append(c1, c2, c3);
       rows.appendChild(tr);
     });
-    $("adminSub").textContent = count ? `${ar(count)} حساب · ${ar(total)} أمبوش في المجموع` : "لا توجد حسابات بعد.";
+    $("adminSub").textContent = count ? `${count} accounts · ${total} Ambosh in total` : "No accounts yet.";
   } catch (e) {
-    $("adminSub").textContent = "ليس لديك صلاحية لرؤية هذه القائمة.";
+    $("adminSub").textContent = "You do not have permission to see this list.";
   }
 }
 $("refreshBtn").onclick = loadAdmin;
