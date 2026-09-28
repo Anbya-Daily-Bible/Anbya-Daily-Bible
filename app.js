@@ -74,9 +74,13 @@ function friendlyError(e) {
     "auth/invalid-credential": "Email or password is not right.",
     "auth/user-not-found": "Email or password is not right.",
     "auth/wrong-password": "Email or password is not right.",
-    "auth/too-many-requests": "Too many tries. Please wait a moment."
+    "auth/too-many-requests": "Too many tries. Please wait a moment.",
+    "auth/operation-not-allowed": "Email/Password sign-in is not turned on in Firebase (Authentication → Sign-in method).",
+    "auth/network-request-failed": "No internet connection. Please try again.",
+    "auth/unauthorized-domain": "This website address is not allowed in Firebase (Authentication → Settings → Authorized domains)."
   };
-  return map[e.code] || "Something went wrong. Please try again.";
+  console.error("Auth error:", e);
+  return map[e.code] || "Something went wrong (" + (e.code || "error") + "). Please try again.";
 }
 
 /* ---------- Sign in / sign up ---------- */
