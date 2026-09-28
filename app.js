@@ -4,10 +4,9 @@ import {
   signInWithEmailAndPassword, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, increment,
+  getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, increment,
   collection, query, orderBy, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { START_DATE, SETS } from "./questions.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
@@ -43,11 +42,15 @@ function todayStr() {
   const d = new Date();
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
-function todaysSet() {
-  const [sy, sm, sd] = START_DATE.split("-").map(Number);
-  const [ty, tm, td] = todayStr().split("-").map(Number);
-  const days = Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(sy, sm - 1, sd)) / 86400000);
-  return SETS[((Math.max(days, 0)) % SETS.length + SETS.length) % SETS.length];
+// Today's questions are typed by the owner and stored in Firestore: quizzes/YYYY-MM-DD
+async function fetchSet(day) {
+  try {
+    const snap = await getDoc(doc(db, "quizzes", day));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.error("Could not load questions:", e);
+    return null;
+  }
 }
 function shuffle(a) {
   a = a.slice();
@@ -136,9 +139,10 @@ onAuthStateChanged(auth, async (u) => {
     data = { ambosh: 0, lastDay: "", lastScore: 0 };
   }
   today = todayStr();
+  set = await fetchSet(today);
+  if (!set) { showNoQuiz(); return; }
   if (data.pDay === today) {
     // Continue where the child stopped (a refresh never resets answered questions)
-    set = todaysSet();
     qi = data.pCount || 0;
     score = data.pScore || 0;
     if (qi >= set.qs.length) showDone(); else showQuestion();
@@ -149,9 +153,15 @@ onAuthStateChanged(auth, async (u) => {
   }
 });
 
+function showNoQuiz() {
+  $("trophy").textContent = "🌅";
+  $("resultTitle").textContent = "No questions today";
+  $("resultSub").textContent = "Come back tomorrow for new questions!";
+  show("resultView");
+}
+
 /* ---------- Daily quiz ---------- */
 function startQuiz() {
-  set = todaysSet();
   qi = 0; score = 0;
   showQuestion();
 }
@@ -268,7 +278,106 @@ async function loadAdmin() {
   } catch (e) {
     $("adminSub").textContent = "You do not have permission to see this list.";
   }
+  loadQuizList();
 }
 $("refreshBtn").onclick = loadAdmin;
+
+/* ---------- Owner: type the questions on the website ---------- */
+// Format:
+//   مرقس ١ : ١ - ٨              <- first line = the Bible reference
+//   ١- السؤال الأول              <- a line without a bullet = a question
+//   * صوتي                       <- lines starting with * = choices
+//   * ملاكي (صح)                 <- (صح) marks the correct choice
+//   * الكاهن
+// Exactly 3 questions per day. Lines like 1️⃣ are ignored.
+const MARK = /\(\s*(?:صح|صحيح|correct)\s*\)|✅|✔\uFE0F?/gi;
+function parseQuiz(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    .filter((l) => !/^[0-9٠-٩]+[\uFE0F\u20E3]*$/.test(l));
+  const ref = lines.shift();
+  if (!ref) throw new Error("Write the Bible reference on the first line.");
+  const qs = [];
+  let cur = null;
+  for (const l of lines) {
+    const m = l.match(/^[*•▪◦●\-–]\s*(.*)$/);
+    if (m) {
+      if (!cur) throw new Error("A choice appears before any question: " + l);
+      const correct = new RegExp(MARK.source, "i").test(m[1]);
+      const t = m[1].replace(MARK, "").trim();
+      if (!t) throw new Error("There is an empty choice in question " + qs.length);
+      cur.o.push(t);
+      if (correct) { cur.a = cur.o.length - 1; cur.c++; }
+    } else {
+      cur = { q: l.replace(/^[0-9٠-٩]+\s*[-.):]\s*/, ""), o: [], a: -1, c: 0 };
+      qs.push(cur);
+    }
+  }
+  if (qs.length !== 3) throw new Error("You need exactly 3 questions (found " + qs.length + ").");
+  qs.forEach((q, i) => {
+    if (q.o.length < 2) throw new Error("Question " + (i + 1) + " needs at least 2 choices.");
+    if (q.c !== 1) throw new Error("Question " + (i + 1) + " needs exactly one choice marked (صح).");
+  });
+  return { ref, qs: qs.map(({ q, o, a }) => ({ q, o, a })) };
+}
+function formatQuiz(z) {
+  return z.ref + "\n\n" + z.qs.map((q, i) =>
+    (i + 1) + "- " + q.q + "\n" + q.o.map((o, j) => "* " + o + (j === q.a ? " (صح)" : "")).join("\n")
+  ).join("\n\n");
+}
+
+$("qDate").value = todayStr();
+$("qSave").onclick = async () => {
+  const m = $("qMsg");
+  m.className = "msg";
+  try {
+    const day = $("qDate").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Pick a date.");
+    const z = parseQuiz($("qText").value);
+    $("qSave").disabled = true;
+    await setDoc(doc(db, "quizzes", day), { ...z, updated: Date.now() });
+    m.textContent = "✅ Saved for " + day;
+    $("qText").value = "";
+    loadQuizList();
+  } catch (e) {
+    m.className = "err";
+    m.textContent = e.message || "Could not save.";
+  }
+  $("qSave").disabled = false;
+};
+
+async function loadQuizList() {
+  const box = $("qList");
+  box.innerHTML = "";
+  try {
+    const snap = await getDocs(collection(db, "quizzes"));
+    const items = [];
+    snap.forEach((d) => items.push({ day: d.id, ...d.data() }));
+    items.sort((a, b) => (a.day < b.day ? 1 : -1));
+    if (!items.length) { box.textContent = "No days scheduled yet."; return; }
+    items.forEach((z) => {
+      const row = document.createElement("div");
+      row.className = "qrow";
+      const label = document.createElement("span");
+      label.textContent = z.day + (z.day === todayStr() ? " (today)" : "") + " · ";
+      const ref = document.createElement("bdi");
+      ref.textContent = z.ref;
+      label.appendChild(ref);
+      const edit = document.createElement("button");
+      edit.textContent = "Edit";
+      edit.onclick = () => { $("qDate").value = z.day; $("qText").value = formatQuiz(z); window.scrollTo(0, 0); };
+      const del = document.createElement("button");
+      del.textContent = "Delete";
+      del.onclick = async () => {
+        if (!confirm("Delete the questions for " + z.day + "?")) return;
+        await deleteDoc(doc(db, "quizzes", z.day));
+        loadQuizList();
+      };
+      row.append(label, edit, del);
+      box.appendChild(row);
+    });
+  } catch (e) {
+    box.textContent = "Could not load the scheduled days.";
+  }
+}
 
 renderAuth();
