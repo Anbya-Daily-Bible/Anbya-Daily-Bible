@@ -298,17 +298,23 @@ function parseQuiz(text) {
   if (!ref) throw new Error("Write the Bible reference on the first line.");
   const qs = [];
   let cur = null;
+  const NUM = /^[0-9٠-٩]+\s*[-.):]\s*/;
+  // If the questions are numbered (١- ٢- ٣-), every other line is a choice (bullet optional).
+  // If nothing is numbered, a line without a bullet is a question.
+  const numbered = lines.some((l) => NUM.test(l));
   for (const l of lines) {
     const m = l.match(/^[*•▪◦●\-–]\s*(.*)$/);
-    if (m) {
+    const isChoice = numbered ? !NUM.test(l) : !!m;
+    if (isChoice) {
       if (!cur) throw new Error("A choice appears before any question: " + l);
-      const correct = new RegExp(MARK.source, "i").test(m[1]);
-      const t = m[1].replace(MARK, "").trim();
+      const text = m ? m[1] : l;
+      const correct = new RegExp(MARK.source, "i").test(text);
+      const t = text.replace(MARK, "").trim();
       if (!t) throw new Error("There is an empty choice in question " + qs.length);
       cur.o.push(t);
       if (correct) { cur.a = cur.o.length - 1; cur.c++; }
     } else {
-      cur = { q: l.replace(/^[0-9٠-٩]+\s*[-.):]\s*/, ""), o: [], a: -1, c: 0 };
+      cur = { q: l.replace(NUM, ""), o: [], a: -1, c: 0 };
       qs.push(cur);
     }
   }
