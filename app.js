@@ -5,7 +5,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, increment,
-  collection, query, orderBy, getDocs
+  collection, query, orderBy, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
@@ -41,9 +41,18 @@ let set = null;             // today's quiz
 let qi = 0, score = 0, answered = false;
 
 /* ---------- Helpers ---------- */
+// Uses Cairo time, so changing the phone's clock does not change the quiz day.
 function todayStr() {
-  const d = new Date();
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const p = {};
+  new Intl.DateTimeFormat("en-US", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(new Date()).forEach((x) => (p[x.type] = x.value));
+  return p.year + "-" + p.month + "-" + p.day;
+}
+// Correct answers live in answers/{day}/items/{i} and can only be read AFTER the pick is saved
+async function fetchAnswer(day, i) {
+  const snap = await getDoc(doc(db, "answers", day, "items", String(i)));
+  if (!snap.exists()) throw new Error("answer-missing");
+  return snap.data().a;
 }
 // Today's questions are typed by the owner and stored in Firestore: quizzes/YYYY-MM-DD
 async function fetchSet(day) {
@@ -109,7 +118,7 @@ $("authBtn").onclick = async () => {
       if (!isOwner(cred.user)) {
         await setDoc(doc(db, "users", cred.user.uid), {
           email: cred.user.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-          pDay: "", pCount: 0, pScore: 0
+          pDay: "", pCount: 0, pScore: 0, picks: [], pPaid: 0
         });
       }
     } else {
@@ -133,16 +142,19 @@ onAuthStateChanged(auth, async (u) => {
     if (!snap.exists()) {
       await setDoc(ref, {
         email: u.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-        pDay: "", pCount: 0, pScore: 0
+        pDay: "", pCount: 0, pScore: 0, picks: [], pPaid: 0
       });
       snap = await getDoc(ref);
     }
     data = snap.data();
+    data.picks = data.picks || [];
+    if (data.pPaid === undefined) data.pPaid = data.pCount || 0;
   } catch (e) {
     console.error("Could not load account:", e);
-    data = { ambosh: 0, lastDay: "", lastScore: 0 };
+    data = { ambosh: 0, lastDay: "", lastScore: 0, picks: [], pPaid: 0 };
   }
   today = todayStr();
+  await settlePending();   // if the page was closed between "pick saved" and "points added"
   set = await fetchSet(today);
   if (!set) { showNoQuiz(); return; }
   if (data.pDay === today) {
@@ -181,64 +193,100 @@ function showQuestion() {
   $("nextBtn").hidden = true;
   const box = $("options");
   box.innerHTML = "";
-  shuffle(q.o).forEach((name) => {
+  shuffle(q.o.map((name, idx) => ({ name, idx }))).forEach(({ name, idx }) => {
     const b = document.createElement("button");
     b.className = "opt";
     b.textContent = name;
-    b.onclick = () => pick(b, name);
+    b.dataset.idx = idx;
+    b.onclick = () => pick(idx);
     box.appendChild(b);
   });
   show("quizView");
 }
 
-let saved = true, pendingCorrect = false;
+let saved = true, chosen = -1, pickSaved = false, correctIdx = null, credited = false;
 
-async function pick(btn, name) {
+async function pick(idx) {
   if (answered) return;          // each question can only be answered once
   answered = true;
-  const q = set.qs[qi];
-  const right = q.o[q.a];
-  document.querySelectorAll(".opt").forEach((b) => { if (b.textContent === right) b.classList.add("good"); });
-  pendingCorrect = name === right;
-  if (!pendingCorrect) btn.classList.add("bad");
+  chosen = idx; pickSaved = false; correctIdx = null; credited = false;
   await saveAnswer();
 }
 
-// Saves this answer right away, so a refresh can never let the child answer it again
+// Step A: lock in the pick.  Step B: read the real answer, then add the points.
+// The Firestore rules check both steps, so the score cannot be faked from the browser.
 async function saveAnswer() {
   const m = $("msg");
-  const inc = pendingCorrect ? 1 : 0;
+  const ref = doc(db, "users", user.uid);
   saved = false;
   $("nextBtn").hidden = true;
   m.textContent = "Saving...";
   try {
-    await updateDoc(doc(db, "users", user.uid), {
-      ambosh: increment(inc), pDay: today, pCount: qi + 1, pScore: score + inc
+    if (!pickSaved) {
+      const fresh = data.pDay !== today;
+      const picks = fresh ? [chosen] : [...(data.picks || []), chosen];
+      const patch = fresh
+        ? { pDay: today, pCount: 1, picks, pScore: 0, pPaid: 0 }
+        : { pCount: qi + 1, picks };
+      await updateDoc(ref, patch);
+      data.pDay = today; data.pCount = patch.pCount; data.picks = picks;
+      if (fresh) { data.pScore = 0; data.pPaid = 0; }
+      pickSaved = true;
+    }
+    if (correctIdx === null) correctIdx = await fetchAnswer(today, qi);
+    document.querySelectorAll(".opt").forEach((b) => {
+      const i = Number(b.dataset.idx);
+      if (i === correctIdx) b.classList.add("good");
+      else if (i === chosen) b.classList.add("bad");
     });
+    if (!credited) {
+      const gain = chosen === correctIdx ? 1 : 0;
+      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + gain, pPaid: (data.pPaid || 0) + 1 });
+      data.ambosh = (data.ambosh || 0) + gain;
+      data.pScore = (data.pScore || 0) + gain;
+      data.pPaid = (data.pPaid || 0) + 1;
+      score = data.pScore;
+      credited = true;
+    }
   } catch (e) {
     console.error("Save failed:", e);
-    m.textContent = "Could not save (" + (e.code || "error") + "). Check your internet and try again.";
+    m.textContent = "Could not save (" + (e.code || e.message || "error") + "). Check your internet and try again.";
     $("nextBtn").textContent = "Try saving again";
     $("nextBtn").hidden = false;
     return;
   }
   saved = true;
-  score += inc;
-  data.ambosh = (data.ambosh || 0) + inc;
-  data.pDay = today; data.pCount = qi + 1; data.pScore = score;
   $("ambosh").textContent = ar(data.ambosh);
-  if (pendingCorrect) {
+  if (chosen === correctIdx) {
     m.textContent = "🎉 Correct! +1 Ambosh";
   } else {
     m.textContent = "Unfortunately not right. The correct answer is: ";
     const ans = document.createElement("bdi");
     ans.dir = "rtl";
-    ans.textContent = set.qs[qi].o[set.qs[qi].a];
+    ans.textContent = set.qs[qi].o[correctIdx];
     m.appendChild(ans);
   }
   const last = qi === set.qs.length - 1;
   $("nextBtn").textContent = last ? "See my result" : "Next question ➜";
   $("nextBtn").hidden = false;
+}
+
+// If the page was closed after a pick was saved but before its points were added
+async function settlePending() {
+  try {
+    const ref = doc(db, "users", user.uid);
+    while ((data.pPaid || 0) < (data.pCount || 0) && (data.picks || []).length === data.pCount) {
+      const i = data.pPaid || 0;
+      const a = await fetchAnswer(data.pDay, i);
+      const gain = data.picks[i] === a ? 1 : 0;
+      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + gain, pPaid: i + 1 });
+      data.ambosh = (data.ambosh || 0) + gain;
+      data.pScore = (data.pScore || 0) + gain;
+      data.pPaid = i + 1;
+    }
+  } catch (e) {
+    console.error("Could not settle earlier answer:", e);
+  }
 }
 
 $("nextBtn").onclick = () => {
@@ -344,7 +392,12 @@ $("qSave").onclick = async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Pick a date.");
     const z = parseQuiz($("qText").value);
     $("qSave").disabled = true;
-    await setDoc(doc(db, "quizzes", day), { ...z, updated: Date.now() });
+    const batch = writeBatch(db);
+    // questions (readable by children) - NO answers inside
+    batch.set(doc(db, "quizzes", day), { ref: z.ref, qs: z.qs.map(({ q, o }) => ({ q, o })), updated: Date.now() });
+    // correct answers (kept hidden by the rules until a child has answered)
+    z.qs.forEach((q, i) => batch.set(doc(db, "answers", day, "items", String(i)), { a: q.a }));
+    await batch.commit();
     m.textContent = "✅ Saved for " + day;
     $("qText").value = "";
     loadQuizList();
@@ -374,12 +427,25 @@ async function loadQuizList() {
       label.appendChild(ref);
       const edit = document.createElement("button");
       edit.textContent = "Edit";
-      edit.onclick = () => { $("qDate").value = z.day; $("qText").value = formatQuiz(z); window.scrollTo(0, 0); };
+      edit.onclick = async () => {
+        const qs = await Promise.all(z.qs.map(async (q, i) => {
+          let a = q.a;   // old-format quizzes still have the answer inside
+          try {
+            const s = await getDoc(doc(db, "answers", z.day, "items", String(i)));
+            if (s.exists()) a = s.data().a;
+          } catch (e) {}
+          return { ...q, a };
+        }));
+        $("qDate").value = z.day; $("qText").value = formatQuiz({ ...z, qs }); window.scrollTo(0, 0);
+      };
       const del = document.createElement("button");
       del.textContent = "Delete";
       del.onclick = async () => {
         if (!confirm("Delete the questions for " + z.day + "?")) return;
-        await deleteDoc(doc(db, "quizzes", z.day));
+        const batch = writeBatch(db);
+        batch.delete(doc(db, "quizzes", z.day));
+        [0, 1, 2].forEach((i) => batch.delete(doc(db, "answers", z.day, "items", String(i))));
+        await batch.commit();
         loadQuizList();
       };
       row.append(label, edit, del);
