@@ -1,32 +1,104 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Owner emails (lowercase). Must match OWNER_EMAILS in app.js.
     function isOwnerUser() {
       return request.auth != null
-        && request.auth.token.email.lower() == 'pierre2006hany@gmail.com';
+        && request.auth.token.email.lower() in ['pierre2006hany@gmail.com', 'marysafwatsobhy@gmail.com'];
     }
 
-    // Daily questions: any signed-in user reads, only the owner writes.
+    // Today's date in Cairo, computed by the SERVER clock (not the child's phone).
+    // Egypt is UTC+2 in winter and UTC+3 in summer, so we accept both.
+    function pad2(n) { return n < 10 ? '0' + string(n) : string(n); }
+    function dayAt(h) {
+      let t = request.time + duration.value(h, 'h');
+      return string(t.year()) + '-' + pad2(t.month()) + '-' + pad2(t.day());
+    }
+
+    // ---------- Questions (NO answers inside) ----------
+    // Signed-in users can read today's and past questions, never future ones.
     match /quizzes/{day} {
-      allow read: if request.auth != null;
+      allow read: if isOwnerUser() || (request.auth != null && day <= dayAt(3));
+      allow write: if isOwnerUser();
+    }
+
+    // ---------- Correct answers ----------
+    // answers/{day}/items/{0|1|2} = { a: <index of the correct choice> }
+    // A child can read question N's answer ONLY after their own pick for
+    // question N is already saved. The owner can read and write everything.
+    match /answers/{day}/items/{i} {
+      function answered() {
+        let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+        return u.get('pDay', '') == day
+          && (
+            (i == '0' && u.get('pCount', 0) >= 1) ||
+            (i == '1' && u.get('pCount', 0) >= 2) ||
+            (i == '2' && u.get('pCount', 0) >= 3)
+          );
+      }
+      allow read: if isOwnerUser() || (request.auth != null && answered());
       allow write: if isOwnerUser();
     }
 
     match /users/{uid} {
 
-      // Owner email (lowercase). Must match OWNER_EMAIL in app.js.
-      function isOwner() {
-        return request.auth != null
-          && request.auth.token.email.lower() == 'pierre2006hany@gmail.com';
-      }
-
-      // Progress saved before this update (works for older accounts too)
+      // Old values (with defaults, so older accounts keep working)
       function oldDay()   { return resource.data.get('pDay', ''); }
       function oldCount() { return resource.data.get('pCount', 0); }
       function oldScore() { return resource.data.get('pScore', 0); }
+      function oldPicks() { return resource.data.get('picks', []); }
+      function oldPaid()  { return resource.data.get('pPaid', oldCount()); }
+
+      // 1 Ambosh if the saved pick for question i matches the real answer, else 0.
+      function gain(i) {
+        return (oldPicks()[i] ==
+          get(/databases/$(database)/documents/answers/$(oldDay())/items/$(string(i))).data.a) ? 1 : 0;
+      }
+
+      // STEP A: the child locks in a pick. No points change here,
+      // so a wrong guess can never be "tested" against the rules.
+      function answerStep() {
+        let d = request.resource.data;
+        return oldPaid() == oldCount()
+          && d.ambosh == resource.data.ambosh
+          && d.pCount is int && d.pCount >= 1 && d.pCount <= 3
+          && d.picks is list && d.picks.size() == d.pCount
+          && d.picks[d.pCount - 1] is int
+          && d.picks[d.pCount - 1] >= 0 && d.picks[d.pCount - 1] <= 9
+          && (
+            // continuing the same day: exactly one more pick
+            (oldDay() != ''
+              && d.pDay == oldDay()
+              && d.pCount == oldCount() + 1
+              && d.picks == oldPicks().concat([d.picks[d.pCount - 1]])
+              && d.diff(resource.data).affectedKeys().hasOnly(['pCount', 'picks']))
+            ||
+            // first pick of a new day: must be TODAY (server clock)
+            (d.pDay > oldDay()
+              && (d.pDay == dayAt(3) || d.pDay == dayAt(2))
+              && d.pCount == 1
+              && d.pScore == 0
+              && d.pPaid == 0
+              && d.diff(resource.data).affectedKeys().hasOnly(['pDay', 'pCount', 'picks', 'pScore', 'pPaid']))
+          );
+      }
+
+      // STEP B: pay for one saved pick. The rules compare the saved pick with
+      // the real answer, so the child cannot claim points they did not earn.
+      function creditStep() {
+        let d = request.resource.data;
+        let i = oldPaid();
+        return i < oldCount()
+          && oldPicks().size() == oldCount()
+          && d.pPaid == i + 1
+          && d.pScore == oldScore() + gain(i)
+          && d.ambosh == resource.data.ambosh + gain(i)
+          && d.diff(resource.data).affectedKeys().hasOnly(['ambosh', 'pScore', 'pPaid']);
+      }
 
       // A child reads only their own account. The owner reads all.
-      allow read: if request.auth != null && (request.auth.uid == uid || isOwner());
+      allow read: if request.auth != null && (request.auth.uid == uid || isOwnerUser());
 
       // A child creates only their own account, starting at 0 Ambosh.
       allow create: if request.auth != null
@@ -35,33 +107,14 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email.lower()
         && request.resource.data.pDay == ''
         && request.resource.data.pCount == 0
-        && request.resource.data.pScore == 0;
+        && request.resource.data.pScore == 0
+        && request.resource.data.picks == []
+        && request.resource.data.pPaid == 0;
 
-      // Every answer is saved on its own: one more answer, 0 or 1 Ambosh.
       allow update: if request.auth != null
         && request.auth.uid == uid
         && request.resource.data.email == resource.data.email
-        && request.resource.data.pDay is string
-        && request.resource.data.pCount is int
-        && request.resource.data.pScore is int
-        && request.resource.data.pCount >= 1
-        && request.resource.data.pCount <= 3
-        && request.resource.data.pScore >= 0
-        && request.resource.data.pScore <= request.resource.data.pCount
-        && (
-          // continuing the same day's quiz: exactly one more answer
-          (request.resource.data.pDay == oldDay()
-            && request.resource.data.pCount == oldCount() + 1
-            && request.resource.data.pScore >= oldScore()
-            && request.resource.data.pScore <= oldScore() + 1
-            && request.resource.data.ambosh == resource.data.ambosh + (request.resource.data.pScore - oldScore()))
-          ||
-          // first answer of a new day (day must be later than the last one)
-          (request.resource.data.pDay > oldDay()
-            && request.resource.data.pCount == 1
-            && request.resource.data.pScore <= 1
-            && request.resource.data.ambosh == resource.data.ambosh + request.resource.data.pScore)
-        );
+        && (answerStep() || creditStep());
 
       allow delete: if false;
     }
