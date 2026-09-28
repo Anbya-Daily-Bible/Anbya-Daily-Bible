@@ -11,13 +11,13 @@ import { START_DATE, SETS } from "./questions.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
-  apiKey: "AIzaSyBvGbibgzjZr9X9dovCG3K9yFozl4fwiPQ",
-  authDomain: "anbya-daily-bible.firebaseapp.com",
-  projectId: "anbya-daily-bible",
-  storageBucket: "anbya-daily-bible.firebasestorage.app",
-  messagingSenderId: "216663190113",
-  appId: "1:216663190113:web:67d9efd0d987209ef85820",
-  measurementId: "G-C6M39N9GPY"
+  apiKey: "AIzaSyBYrOhTJ84nTaHRT--yzZXaP9i1mRvN1dg",
+  authDomain: "anbya-daily-bible-9e388.firebaseapp.com",
+  projectId: "anbya-daily-bible-9e388",
+  storageBucket: "anbya-daily-bible-9e388.firebasestorage.app",
+  messagingSenderId: "826856941464",
+  appId: "1:826856941464:web:aa3e95b649e73365fa2ded",
+  measurementId: "G-8JKPPCDLMP"
 };
 
 /* ============ 2) YOUR (OWNER) EMAIL — must match firestore.rules ============ */
