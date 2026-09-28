@@ -182,7 +182,7 @@ function pick(btn, name) {
   } else {
     btn.classList.add("bad");
     const m = $("msg");
-    m.textContent = "Not this time. Correct answer: ";
+    m.textContent = "Unfortunately not right. The correct answer is: ";
     const ans = document.createElement("bdi");
     ans.dir = "rtl";
     ans.textContent = right;
