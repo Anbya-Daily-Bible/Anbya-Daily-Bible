@@ -19,8 +19,11 @@ const firebaseConfig = {
   measurementId: "G-8JKPPCDLMP"
 };
 
-/* ============ 2) YOUR (OWNER) EMAIL — must match firestore.rules ============ */
-const OWNER_EMAIL = "pierre2006hany@gmail.com";
+/* ============ 2) OWNER EMAILS — must match firestore.rules ============ */
+const OWNER_EMAILS = [
+  "pierre2006hany@gmail.com",
+  "marysafwatsobhy@gmail.com"
+].map((e) => e.toLowerCase());
 /* =============================================================== */
 
 const app = initializeApp(firebaseConfig);
@@ -60,7 +63,8 @@ function shuffle(a) {
   }
   return a;
 }
-const isOwner = (u) => !!(u && u.email && u.email.toLowerCase() === OWNER_EMAIL.toLowerCase());
+const isOwnerEmail = (e) => OWNER_EMAILS.includes((e || "").toLowerCase());
+const isOwner = (u) => !!(u && isOwnerEmail(u.email));
 function show(name) {
   $("boot").hidden = true;
   views.forEach((v) => ($(v).hidden = v !== name));
@@ -264,7 +268,7 @@ async function loadAdmin() {
     let total = 0, count = 0;
     snap.forEach((d) => {
       const u = d.data();
-      if ((u.email || "").toLowerCase() === OWNER_EMAIL.toLowerCase()) return;
+      if (isOwnerEmail(u.email)) return;
       const a = Number(u.ambosh) || 0;
       total += a; count++;
       const tr = document.createElement("tr");
