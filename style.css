@@ -101,3 +101,6 @@ td.nm { unicode-bidi: plaintext; text-align: start !important; white-space: norm
 }
 .pm.minus { background: var(--bad); box-shadow: 0 2px 0 #b3282d; }
 .pm.plus { background: var(--good); box-shadow: 0 2px 0 #15794a; }
+/* Excel upload */
+#qMsg { white-space: pre-line; }
+input[type="file"] { font-size: 16px; }
