@@ -7,6 +7,7 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, increment,
   collection, query, orderBy, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { ROSTER, CLASSES } from "./roster.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
@@ -72,6 +73,15 @@ function shuffle(a) {
   }
   return a;
 }
+// Children have no real e-mail. Each child gets a hidden login address built from their id.
+const KID_DOMAIN = "@anbya-kids.app";
+const kidEmail = (kid) => kid.id + KID_DOMAIN;
+const kidFromEmail = (e) => {
+  e = (e || "").toLowerCase();
+  return e.endsWith(KID_DOMAIN) ? ROSTER.find((k) => k.id === e.slice(0, -KID_DOMAIN.length)) : null;
+};
+const firstName = (k) => k.name.trim().split(/\s+/)[0];
+const kidPassword = (k) => firstName(k) + "12345";
 const isOwnerEmail = (e) => OWNER_EMAILS.includes((e || "").toLowerCase());
 const isOwner = (u) => !!(u && isOwnerEmail(u.email));
 function show(name) {
@@ -84,10 +94,10 @@ function friendlyError(e) {
     "auth/invalid-email": "Please type a real email.",
     "auth/missing-password": "Please type a password.",
     "auth/weak-password": "Password needs at least 6 characters.",
-    "auth/email-already-in-use": "That email already has an account.",
-    "auth/invalid-credential": "Email or password is not right.",
-    "auth/user-not-found": "Email or password is not right.",
-    "auth/wrong-password": "Email or password is not right.",
+    "auth/email-already-in-use": "This name already has an account. Tap \"I already have an account\" and sign in.",
+    "auth/invalid-credential": "Name or password is not right. (First time? Tap \"First time here?\")",
+    "auth/user-not-found": "Name or password is not right. (First time? Tap \"First time here?\")",
+    "auth/wrong-password": "Name or password is not right.",
     "auth/too-many-requests": "Too many tries. Please wait a moment.",
     "auth/operation-not-allowed": "Email/Password sign-in is not turned on in Firebase (Authentication → Sign-in method).",
     "auth/network-request-failed": "No internet connection. Please try again.",
@@ -98,50 +108,115 @@ function friendlyError(e) {
 }
 
 /* ---------- Sign in / sign up ---------- */
+let ownerMode = false;
+let ownerSignup = false;
+
+function fillSelect(sel, placeholder, items) {
+  sel.innerHTML = "";
+  const p = document.createElement("option");
+  p.value = ""; p.textContent = placeholder;
+  sel.appendChild(p);
+  items.forEach(([value, label]) => {
+    const o = document.createElement("option");
+    o.value = value; o.textContent = label;
+    sel.appendChild(o);
+  });
+}
+const byName = (a, b) => a.name.localeCompare(b.name);
+
+function renderNames() {
+  const cls = $("classSel").value;
+  const list = ROSTER.filter((k) => k.cls === cls).sort(byName);
+  fillSelect($("nameSel"), cls ? "Choose your name" : "Choose your class first", list.map((k) => [k.id, k.name]));
+  $("nameSel").disabled = !cls;
+}
+
 function renderAuth() {
   const up = mode === "signup";
+  $("kidForm").hidden = ownerMode;
+  $("ownerForm").hidden = !ownerMode;
+  $("ownerBtn").textContent = ownerMode ? "← Back to children sign in" : "Teacher sign in";
+  $("ownerAuthBtn").textContent = ownerSignup ? "Create teacher account" : "Sign in";
+  $("ownerSwitchBtn").textContent = ownerSignup ? "I already have an account" : "New teacher? Make an account";
+  $("ownerPassword").autocomplete = ownerSignup ? "new-password" : "current-password";
   $("authBtn").textContent = up ? "Create my account" : "Sign in";
-  $("switchBtn").textContent = up ? "I already have an account" : "New here? Make an account";
+  $("switchBtn").textContent = up ? "I already have an account" : "First time here? Make an account";
   $("password").autocomplete = up ? "new-password" : "current-password";
   $("authErr").textContent = "";
+  renderNames();
 }
-$("switchBtn").onclick = () => { mode = mode === "signin" ? "signup" : "signin"; renderAuth(); };
+fillSelect($("classSel"), "Choose your class", CLASSES.map((c) => [c, c]));
+$("classSel").onchange = renderNames;
+$("switchBtn").onclick = () => {
+  mode = mode === "signin" ? "signup" : "signin";
+  $("classSel").value = "";
+  renderAuth();
+};
+$("ownerBtn").onclick = () => { ownerMode = !ownerMode; ownerSignup = false; renderAuth(); };
+$("ownerSwitchBtn").onclick = () => { ownerSignup = !ownerSignup; renderAuth(); };
 
 $("authBtn").onclick = async () => {
-  const email = $("email").value.trim();
-  const pw = $("password").value;
+  const kid = ROSTER.find((k) => k.id === $("nameSel").value);
+  const pw = $("password").value.trim().toLowerCase();
   $("authErr").textContent = "";
+  if (!$("classSel").value) { $("authErr").textContent = "Please choose your class."; return; }
+  if (!kid) { $("authErr").textContent = "Please choose your name."; return; }
+  if (!pw) { $("authErr").textContent = "Please type your password."; return; }
   $("authBtn").disabled = true;
   try {
     if (mode === "signup") {
-      const cred = await createUserWithEmailAndPassword(auth, email, pw);
-      if (!isOwner(cred.user)) {
-        await setDoc(doc(db, "users", cred.user.uid), {
-          email: cred.user.email.toLowerCase(), ambosh: 0, joined: Date.now(),
-          pDay: "", pCount: 0, pScore: 0, picks: [], pPaid: 0
-        });
-      }
+      if (pw !== kidPassword(kid)) throw { code: "wrong-kid-password" };
+      // The account record (name + class) is created by onAuthStateChanged below.
+      await createUserWithEmailAndPassword(auth, kidEmail(kid), pw);
+    } else {
+      await signInWithEmailAndPassword(auth, kidEmail(kid), pw);
+    }
+  } catch (e) {
+    $("authErr").textContent = e.code === "wrong-kid-password"
+      ? "That password is not right. Ask your teacher for your password."
+      : friendlyError(e);
+  }
+  $("authBtn").disabled = false;
+};
+
+$("ownerAuthBtn").onclick = async () => {
+  $("authErr").textContent = "";
+  $("ownerAuthBtn").disabled = true;
+  try {
+    const email = $("email").value.trim();
+    const pw = $("ownerPassword").value;
+    if (ownerSignup) {
+      // Only emails listed in OWNER_EMAILS (and firestore.rules) can become teachers
+      if (!isOwnerEmail(email)) throw { code: "not-teacher" };
+      await createUserWithEmailAndPassword(auth, email, pw);
     } else {
       await signInWithEmailAndPassword(auth, email, pw);
     }
   } catch (e) {
+    if (e.code === "not-teacher") {
+      $("authErr").textContent = "This email is not on the teacher list. Ask the site owner to add it.";
+      $("ownerAuthBtn").disabled = false;
+      return;
+    }
     $("authErr").textContent = friendlyError(e);
   }
-  $("authBtn").disabled = false;
+  $("ownerAuthBtn").disabled = false;
 };
 $("signOutBtn").onclick = () => signOut(auth);
 
 /* ---------- Session ---------- */
 onAuthStateChanged(auth, async (u) => {
   user = u;
-  if (!u) { $("password").value = ""; renderAuth(); show("authView"); return; }
+  if (!u) { $("password").value = ""; $("ownerPassword").value = ""; renderAuth(); show("authView"); return; }
   if (isOwner(u)) { loadAdmin(); return; }
   const ref = doc(db, "users", u.uid);
   try {
     let snap = await getDoc(ref);
     if (!snap.exists()) {
+      const kid = kidFromEmail(u.email);
       await setDoc(ref, {
-        email: u.email.toLowerCase(), ambosh: 0, joined: Date.now(),
+        email: u.email.toLowerCase(), name: kid ? kid.name : "", cls: kid ? kid.cls : "",
+        ambosh: 0, joined: Date.now(),
         pDay: "", pCount: 0, pScore: 0, picks: [], pPaid: 0
       });
       snap = await getDoc(ref);
@@ -306,31 +381,83 @@ function showResult(justPlayed) {
 function showDone() { showResult(false); }
 
 /* ---------- Owner: only sees the points, gets no questions ---------- */
+let adminUsers = [];
+const ADJUST_STEP = 5;   // each + or − changes the points by this much
+fillSelect($("adminClass"), "All classes", CLASSES.map((c) => [c, c]));
+$("adminClass").onchange = renderAdmin;
+
 async function loadAdmin() {
-  const rows = $("adminRows");
-  rows.innerHTML = "";
+  $("adminRows").innerHTML = "";
   $("adminSub").textContent = "Loading...";
+  $("adjMsg").textContent = "";
   show("adminView");
   try {
     const snap = await getDocs(query(collection(db, "users"), orderBy("ambosh", "desc")));
-    let total = 0, count = 0;
+    adminUsers = [];
     snap.forEach((d) => {
       const u = d.data();
       if (isOwnerEmail(u.email)) return;
-      const a = Number(u.ambosh) || 0;
-      total += a; count++;
-      const tr = document.createElement("tr");
-      const c1 = document.createElement("td"); c1.className = "mail"; c1.textContent = u.email;
-      const c2 = document.createElement("td"); c2.innerHTML = `<b>${ar(a)}</b>`;
-      const c3 = document.createElement("td"); c3.textContent = u.pDay || u.lastDay || "—";
-      tr.append(c1, c2, c3);
-      rows.appendChild(tr);
+      adminUsers.push({ id: d.id, ...u });
     });
-    $("adminSub").textContent = count ? `${count} accounts · ${total} Ambosh in total` : "No accounts yet.";
+    renderAdmin();
   } catch (e) {
     $("adminSub").textContent = "You do not have permission to see this list.";
   }
   loadQuizList();
+}
+
+function updateAdminSub(list) {
+  const total = list.reduce((s, u) => s + (Number(u.ambosh) || 0), 0);
+  $("adminSub").textContent = list.length ? `${list.length} accounts · ${total} Ambosh in total` : "No accounts yet.";
+}
+
+function renderAdmin() {
+  const rows = $("adminRows");
+  rows.innerHTML = "";
+  const cls = $("adminClass").value;
+  const list = adminUsers.filter((u) => !cls || u.cls === cls);
+  list.forEach((u) => {
+    const tr = document.createElement("tr");
+    const c1 = document.createElement("td"); c1.className = "nm"; c1.textContent = u.name || u.email;
+    const c2 = document.createElement("td"); c2.className = "cls"; c2.textContent = u.cls || "—";
+    const c3 = document.createElement("td"); c3.innerHTML = `<b>${ar(Number(u.ambosh) || 0)}</b>`;
+    const c4 = document.createElement("td");
+    const minus = document.createElement("button"); minus.className = "pm minus"; minus.textContent = "−"; minus.title = "Take away 5";
+    const plus = document.createElement("button"); plus.className = "pm plus"; plus.textContent = "+"; plus.title = "Give 5";
+    minus.onclick = () => adjustAmbosh(u, -1, c3, [minus, plus]);
+    plus.onclick = () => adjustAmbosh(u, 1, c3, [minus, plus]);
+    c4.style.direction = "ltr";
+    c4.append(plus, minus);   // + on the left, − on the right
+    const c5 = document.createElement("td"); c5.textContent = u.pDay || u.lastDay || "—";
+    tr.append(c1, c2, c3, c4, c5);
+    rows.appendChild(tr);
+  });
+  updateAdminSub(list);
+}
+
+// Teacher gives (+) or takes away (-) Ambosh. The Firestore rules only let the owner change 'ambosh'.
+async function adjustAmbosh(u, sign, cell, btns) {
+  const m = $("adjMsg");
+  m.className = "msg";
+  const amt = ADJUST_STEP;
+  const cur = Number(u.ambosh) || 0;
+  const delta = sign > 0 ? amt : -Math.min(amt, cur);   // never below 0
+  if (delta === 0) { m.textContent = (u.name || "This child") + " already has 0 Ambosh."; return; }
+  btns.forEach((b) => (b.disabled = true));
+  try {
+    await updateDoc(doc(db, "users", u.id), { ambosh: increment(delta) });
+    u.ambosh = cur + delta;
+    cell.innerHTML = `<b>${ar(u.ambosh)}</b>`;
+    updateAdminSub(adminUsers.filter((x) => !$("adminClass").value || x.cls === $("adminClass").value));
+    m.textContent = "";
+    const name = document.createElement("bdi"); name.textContent = u.name || u.email;
+    m.append(delta > 0 ? `✅ Gave ${delta} Ambosh to ` : `✅ Took ${-delta} Ambosh from `, name, ` — now ${u.ambosh}`);
+  } catch (e) {
+    console.error("Adjust failed:", e);
+    m.className = "err";
+    m.textContent = "Could not change the points (" + (e.code || e.message || "error") + "). Did you publish the new firestore.rules?";
+  }
+  btns.forEach((b) => (b.disabled = false));
 }
 $("refreshBtn").onclick = loadAdmin;
 
