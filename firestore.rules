@@ -5,7 +5,7 @@ service cloud.firestore {
     // Owner emails (lowercase). Must match OWNER_EMAILS in app.js.
     function isOwnerUser() {
       return request.auth != null
-        && request.auth.token.email.lower() in ['pierre2006hany@gmail.com', 'marysafwatsobhy@gmail.com', 'Miraphilip2013@gmail.com'];
+        && request.auth.token.email.lower() in ['pierre2006hany@gmail.com', 'marysafwatsobhy@gmail.com', 'miraphilip2013@gmail.com'];
     }
 
     // Today's date in Cairo, computed by the SERVER clock (not the child's phone).
