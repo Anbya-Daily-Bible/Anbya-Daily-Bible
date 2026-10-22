@@ -25,7 +25,7 @@ const firebaseConfig = {
 const OWNER_EMAILS = [
   "pierre2006hany@gmail.com",
   "marysafwatsobhy@gmail.com",
-  "Miraphilip2013@gmail.com"
+  "miraphilip2013@gmail.com"
 ].map((e) => e.toLowerCase());
 /* =============================================================== */
 
