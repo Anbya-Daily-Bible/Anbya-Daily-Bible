@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anbya Daily Bible</title>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <main>
@@ -27,12 +27,31 @@
     <p class="sub">Answer 3 questions every day and earn Ambosh!</p>
     <div class="card">
       <p id="authErr" class="err"></p>
-      <label for="email">Email</label>
-      <input id="email" type="email" autocomplete="email">
-      <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="current-password">
-      <button id="authBtn" class="full">Sign in</button>
-      <p class="center"><button id="switchBtn" class="link">New here? Make an account</button></p>
+
+      <!-- Children -->
+      <div id="kidForm">
+        <div id="classRow">
+          <label for="classSel">Class</label>
+          <select id="classSel" class="ar"></select>
+        </div>
+        <label for="nameSel">Name</label>
+        <select id="nameSel"></select>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false">
+        <button id="authBtn" class="full">Sign in</button>
+        <p class="center"><button id="switchBtn" class="link">First time here? Make an account</button></p>
+      </div>
+
+      <!-- Teachers / owners -->
+      <div id="ownerForm" hidden>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email">
+        <label for="ownerPassword">Password</label>
+        <input id="ownerPassword" type="password" autocomplete="current-password">
+        <button id="ownerAuthBtn" class="full">Sign in</button>
+        <p class="center"><button id="ownerSwitchBtn" class="link">New teacher? Make an account</button></p>
+      </div>
+      <p class="center"><button id="ownerBtn" class="link">Teacher sign in</button></p>
     </div>
   </section>
 
@@ -73,9 +92,17 @@
       <div id="qList"></div>
     </div>
     <br>
+    <div class="card">
+      <h2>🪙 Give or take Ambosh</h2>
+      <label for="adminClass">Show class</label>
+      <select id="adminClass" class="ar"></select>
+      <div id="adjMsg" class="msg"></div>
+      <p class="hint">Tap <b>+</b> to give <b>5 Ambosh</b>, or <b>−</b> to take away 5 (a child never goes below 0).</p>
+    </div>
+    <br>
     <div class="card scroll">
       <table>
-        <thead><tr><th>Email</th><th>Ambosh</th><th>Last played</th></tr></thead>
+        <thead><tr><th>Name</th><th>Class</th><th>Ambosh</th><th>Give / Take</th><th>Last played</th></tr></thead>
         <tbody id="adminRows"></tbody>
       </table>
     </div>
