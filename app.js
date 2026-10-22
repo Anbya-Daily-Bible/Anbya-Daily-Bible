@@ -8,6 +8,7 @@ import {
   collection, query, orderBy, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { ROSTER, CLASSES } from "./roster.js";
+import { parseReadings } from "./readings.js";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
@@ -462,74 +463,46 @@ async function adjustAmbosh(u, sign, cell, btns) {
 }
 $("refreshBtn").onclick = loadAdmin;
 
-/* ---------- Owner: type the questions on the website ---------- */
-// Format:
-//   مرقس ١ : ١ - ٨              <- first line = the Bible reference
-//   ١- السؤال الأول              <- a line without a bullet = a question
-//   * صوتي                       <- lines starting with * = choices
-//   * ملاكي (صح)                 <- (صح) marks the correct choice
-//   * الكاهن
-// Exactly 3 questions per day. Lines like 1️⃣ are ignored.
-const MARK = /\(\s*(?:صح|صحيح|correct)\s*\)|✅|✔\uFE0F?/gi;
-function parseQuiz(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
-    .filter((l) => !/^[0-9٠-٩]+[\uFE0F\u20E3]*$/.test(l));
-  const ref = lines.shift();
-  if (!ref) throw new Error("Write the Bible reference on the first line.");
-  const qs = [];
-  let cur = null;
-  const NUM = /^[0-9٠-٩]+\s*[-.):]\s*/;
-  // If the questions are numbered (١- ٢- ٣-), every other line is a choice (bullet optional).
-  // If nothing is numbered, a line without a bullet is a question.
-  const numbered = lines.some((l) => NUM.test(l));
-  for (const l of lines) {
-    const m = l.match(/^[*•▪◦●\-–]\s*(.*)$/);
-    const isChoice = numbered ? !NUM.test(l) : !!m;
-    if (isChoice) {
-      if (!cur) throw new Error("A choice appears before any question: " + l);
-      const text = m ? m[1] : l;
-      const correct = new RegExp(MARK.source, "i").test(text);
-      const t = text.replace(MARK, "").trim();
-      if (!t) throw new Error("There is an empty choice in question " + qs.length);
-      cur.o.push(t);
-      if (correct) { cur.a = cur.o.length - 1; cur.c++; }
-    } else {
-      cur = { q: l.replace(NUM, ""), o: [], a: -1, c: 0 };
-      qs.push(cur);
-    }
-  }
-  if (qs.length !== 3) throw new Error("You need exactly 3 questions (found " + qs.length + ").");
-  qs.forEach((q, i) => {
-    if (q.o.length < 2) throw new Error("Question " + (i + 1) + " needs at least 2 choices.");
-    if (q.c !== 1) throw new Error("Question " + (i + 1) + " needs exactly one choice marked (صح).");
-  });
-  return { ref, qs: qs.map(({ q, o, a }) => ({ q, o, a })) };
-}
-function formatQuiz(z) {
-  return z.ref + "\n\n" + z.qs.map((q, i) =>
-    (i + 1) + "- " + q.q + "\n" + q.o.map((o, j) => "* " + o + (j === q.a ? " (صح)" : "")).join("\n")
-  ).join("\n\n");
-}
-
-$("qDate").value = todayStr();
+/* ---------- Owner: upload the readings from the Excel sheet ---------- */
+// The teacher fills ReadingsInput.xlsx (one row per day) and uploads it here.
+// Columns are explained in readings.js. Needs the SheetJS script loaded in index.html.
+const DAYS_PER_BATCH = 100;   // 4 writes per day; Firestore allows 500 writes per batch
 $("qSave").onclick = async () => {
   const m = $("qMsg");
   m.className = "msg";
+  const file = $("qFile").files[0];
+  if (!file) { m.className = "err"; m.textContent = "Choose the Excel file first."; return; }
+  $("qSave").disabled = true;
   try {
-    const day = $("qDate").value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Pick a date.");
-    const z = parseQuiz($("qText").value);
-    $("qSave").disabled = true;
-    const batch = writeBatch(db);
-    // questions (readable by children) - NO answers inside
-    batch.set(doc(db, "quizzes", day), { ref: z.ref, qs: z.qs.map(({ q, o }) => ({ q, o })), updated: Date.now() });
-    // correct answers (kept hidden by the rules until a child has answered)
-    z.qs.forEach((q, i) => batch.set(doc(db, "answers", day, "items", String(i)), { a: q.a }));
-    await batch.commit();
-    m.textContent = "✅ Saved for " + day;
-    $("qText").value = "";
-    loadQuizList();
+    if (typeof XLSX === "undefined") throw new Error("The Excel reader could not load. Check the internet and refresh the page.");
+    m.textContent = "Reading the file...";
+    const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+    const { days, errors } = parseReadings(rows);
+    if (errors.length) {
+      m.className = "err";
+      m.textContent = "Nothing was saved. Please fix this in the Excel file and upload it again:\n" + errors.join("\n");
+    } else if (!days.length) {
+      throw new Error("No readings were found in the file.");
+    } else {
+      m.textContent = "Saving...";
+      for (let i = 0; i < days.length; i += DAYS_PER_BATCH) {
+        const batch = writeBatch(db);
+        days.slice(i, i + DAYS_PER_BATCH).forEach((d) => {
+          // questions (readable by children) - NO answers inside
+          batch.set(doc(db, "quizzes", d.day), { ref: d.ref, qs: d.qs.map(({ q, o }) => ({ q, o })), updated: Date.now() });
+          // correct answers (kept hidden by the rules until a child has answered)
+          d.qs.forEach((q, k) => batch.set(doc(db, "answers", d.day, "items", String(k)), { a: q.a }));
+        });
+        await batch.commit();
+      }
+      const sorted = days.map((d) => d.day).sort();
+      m.textContent = `✅ Saved ${days.length} day${days.length > 1 ? "s" : ""} (${sorted[0]}${sorted.length > 1 ? " → " + sorted[sorted.length - 1] : ""})`;
+      $("qFile").value = "";
+      loadQuizList();
+    }
   } catch (e) {
+    console.error("Upload failed:", e);
     m.className = "err";
     m.textContent = e.message || "Could not save.";
   }
@@ -553,19 +526,6 @@ async function loadQuizList() {
       const ref = document.createElement("bdi");
       ref.textContent = z.ref;
       label.appendChild(ref);
-      const edit = document.createElement("button");
-      edit.textContent = "Edit";
-      edit.onclick = async () => {
-        const qs = await Promise.all(z.qs.map(async (q, i) => {
-          let a = q.a;   // old-format quizzes still have the answer inside
-          try {
-            const s = await getDoc(doc(db, "answers", z.day, "items", String(i)));
-            if (s.exists()) a = s.data().a;
-          } catch (e) {}
-          return { ...q, a };
-        }));
-        $("qDate").value = z.day; $("qText").value = formatQuiz({ ...z, qs }); window.scrollTo(0, 0);
-      };
       const del = document.createElement("button");
       del.textContent = "Delete";
       del.onclick = async () => {
@@ -576,7 +536,7 @@ async function loadQuizList() {
         await batch.commit();
         loadQuizList();
       };
-      row.append(label, edit, del);
+      row.append(label, del);
       box.appendChild(row);
     });
   } catch (e) {
