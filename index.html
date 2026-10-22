@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Anbya Daily Bible</title>
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
 <main>
@@ -81,13 +81,11 @@
     <h1>🪙 Anbya's Ambosh</h1>
     <p id="adminSub" class="sub"></p>
     <div class="card">
-      <h2>✏️ Add questions</h2>
-      <label for="qDate">Day these questions appear</label>
-      <input id="qDate" type="date">
-      <label for="qText">Questions (3 per day)</label>
-      <textarea id="qText" dir="rtl" rows="12" placeholder="مرقس ١ : ١ - ٨&#10;&#10;١- السؤال الأول&#10;* الاختيار الأول&#10;* الاختيار الثاني (صح)&#10;* الاختيار الثالث&#10;&#10;٢- السؤال الثاني&#10;* ...&#10;&#10;٣- السؤال الثالث&#10;* ..."></textarea>
+      <h2>📗 Upload the readings (Excel)</h2>
+      <p class="hint">Fill in <b>ReadingsInput.xlsx</b> (one row for each day), then choose the file here and press Upload. The children will see each day's questions on its date. Uploading a day again replaces it.</p>
+      <input id="qFile" type="file" accept=".xlsx,.xlsm">
       <div id="qMsg" class="msg"></div>
-      <button id="qSave" class="full">Save questions</button>
+      <button id="qSave" class="full">Upload readings</button>
       <h2>📅 Scheduled days</h2>
       <div id="qList"></div>
     </div>
@@ -113,6 +111,7 @@
     <button id="signOutBtn" class="link">Sign out</button>
   </p>
 </main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
