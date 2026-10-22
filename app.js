@@ -23,7 +23,8 @@ const firebaseConfig = {
 /* ============ 2) OWNER EMAILS — must match firestore.rules ============ */
 const OWNER_EMAILS = [
   "pierre2006hany@gmail.com",
-  "marysafwatsobhy@gmail.com"
+  "marysafwatsobhy@gmail.com",
+  "Miraphilip2013@gmail.com"
 ].map((e) => e.toLowerCase());
 /* =============================================================== */
 
