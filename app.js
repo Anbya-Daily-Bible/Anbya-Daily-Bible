@@ -26,7 +26,14 @@ const OWNER_EMAILS = [
   "pierre2006hany@gmail.com",
   "marysafwatsobhy@gmail.com",
   "miraphilip2013@gmail.com",
-  "john.awadallah@gmail.com"
+  "john.awadallah@gmail.com",
+  "youssefmaged.nm@gmail.com",
+  "jessicawessam2007@gmail.com",
+  "beshoyyoussrey@gmail.com",
+  "martinanagynasry889@gmail.com",
+  "markfady2007@gmail.com",
+  "nattoo2007@gmail.com",
+  "silvysafwat3@gmail.com"
 ].map((e) => e.toLowerCase());
 /* =============================================================== */
 
