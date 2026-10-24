@@ -104,3 +104,7 @@ td.nm { unicode-bidi: plaintext; text-align: start !important; white-space: norm
 /* Excel upload */
 #qMsg { white-space: pre-line; }
 input[type="file"] { font-size: 16px; }
+
+/* Logo */
+.brand { display: flex; justify-content: center; margin: 4px 0 10px; }
+.brand img { height: 110px; width: auto; display: block; }
