@@ -1,0 +1,32 @@
+{
+  "name": "Anbya Daily Bible",
+  "short_name": "Anbya",
+  "description": "Answer 3 Bible questions every day and earn Ambosh.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#1e88e5",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "Logo/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "Logo/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "Logo/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
