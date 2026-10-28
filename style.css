@@ -105,6 +105,20 @@ td.nm { unicode-bidi: plaintext; text-align: start !important; white-space: norm
 #qMsg { white-space: pre-line; }
 input[type="file"] { font-size: 16px; }
 
+/* Show / hide password */
+.pwrow { position: relative; }
+.pwrow input { padding-inline-end: 52px; }
+.pwrow .eye {
+  position: absolute; top: 6px; inset-inline-end: 6px; width: 40px; height: 40px; padding: 0;
+  background: none; box-shadow: none; color: var(--blue-dark); font-size: 20px; line-height: 1;
+}
+.pwrow .eye:active { transform: none; box-shadow: none; }
+.pwrow .eye.on { opacity: .55; }
+
+/* Scheduled days toggle */
+button.toggle { margin: 10px 0; }
+#qList { margin-bottom: 8px; }
+
 /* Logo */
 .brand { display: flex; justify-content: center; margin: 4px 0 10px; }
 .brand img { height: 110px; width: auto; display: block; }
