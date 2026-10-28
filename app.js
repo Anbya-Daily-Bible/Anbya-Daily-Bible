@@ -222,10 +222,36 @@ $("ownerAuthBtn").onclick = async () => {
 };
 $("signOutBtn").onclick = () => signOut(auth);
 
+// Eye button: show / hide what is typed in a password box
+function wirePasswordToggle(btnId, inputId) {
+  const btn = $(btnId), input = $(inputId);
+  btn.onclick = () => {
+    const showIt = input.type === "password";
+    input.type = showIt ? "text" : "password";
+    btn.classList.toggle("on", showIt);
+    const label = showIt ? "Hide password" : "Show password";
+    btn.title = label; btn.setAttribute("aria-label", label);
+  };
+}
+wirePasswordToggle("pwToggle", "password");
+wirePasswordToggle("ownerPwToggle", "ownerPassword");
+
+// Teacher: show / hide the list of scheduled days
+$("toggleDays").onclick = () => {
+  const box = $("qList");
+  box.hidden = !box.hidden;
+  $("toggleDays").textContent = box.hidden ? "📅 Show scheduled days" : "📅 Hide scheduled days";
+};
+
 /* ---------- Session ---------- */
 onAuthStateChanged(auth, async (u) => {
   user = u;
-  if (!u) { $("password").value = ""; $("ownerPassword").value = ""; renderAuth(); show("authView"); return; }
+  if (!u) {
+    $("password").value = ""; $("ownerPassword").value = "";
+    $("password").type = "password"; $("ownerPassword").type = "password";   // hide again after sign out
+    $("pwToggle").classList.remove("on"); $("ownerPwToggle").classList.remove("on");
+    renderAuth(); show("authView"); return;
+  }
   if (isOwner(u)) { loadAdmin(); return; }
   const ref = doc(db, "users", u.uid);
   try {
@@ -317,6 +343,7 @@ async function saveAnswer() {
   try {
     if (!pickSaved) {
       const fresh = data.pDay !== today;
+      const playedBefore = !!(data.pDay || data.lastDay);   // had a "last played" day before today
       const picks = fresh ? [chosen] : [...(data.picks || []), chosen];
       const patch = fresh
         ? { pDay: today, pCount: 1, picks, pScore: 0, pPaid: 0 }
@@ -325,6 +352,22 @@ async function saveAnswer() {
       data.pDay = today; data.pCount = patch.pCount; data.picks = picks;
       if (fresh) { data.pScore = 0; data.pPaid = 0; }
       pickSaved = true;
+      if (fresh) {
+        // Count this as one more day played. Separate write, so if the rules reject it the quiz still works.
+        try {
+          if (data.daysPlayed === undefined) {
+            // First time counting: an earlier day was already played but never counted, so start at 1 + today
+            const start = playedBefore ? 2 : 1;
+            await updateDoc(ref, { daysPlayed: start });
+            data.daysPlayed = start;
+          } else {
+            await updateDoc(ref, { daysPlayed: increment(1) });
+            data.daysPlayed = data.daysPlayed + 1;
+          }
+        } catch (e) {
+          console.error("Could not count the day played:", e);
+        }
+      }
     }
     if (correctIdx === null) correctIdx = await fetchAnswer(today, qi);
     document.querySelectorAll(".opt").forEach((b) => {
@@ -446,8 +489,11 @@ function renderAdmin() {
     plus.onclick = () => adjustAmbosh(u, 1, c3, [minus, plus]);
     c4.style.direction = "ltr";
     c4.append(plus, minus);   // + on the left, − on the right
-    const c5 = document.createElement("td"); c5.textContent = u.pDay || u.lastDay || "—";
-    tr.append(c1, c2, c3, c4, c5);
+    // Children who played before this counter existed show at least 1 if they have ever played
+    const played = u.daysPlayed !== undefined ? Number(u.daysPlayed) || 0 : ((u.pDay || u.lastDay) ? 1 : 0);
+    const c5 = document.createElement("td"); c5.innerHTML = `<b>${ar(played)}</b>`;
+    const c6 = document.createElement("td"); c6.textContent = u.pDay || u.lastDay || "—";
+    tr.append(c1, c2, c3, c4, c5, c6);
     rows.appendChild(tr);
   });
   updateAdminSub(list);
