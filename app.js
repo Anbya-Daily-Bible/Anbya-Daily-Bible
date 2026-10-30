@@ -50,7 +50,15 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 const views = ["authView", "quizView", "resultView", "adminView"];
-const ar = (n) => String(Number(n));
+const ar = (n) => String(Math.round(Number(n) * 100) / 100);   // 0.25, 0.75, 1 ... (no long decimals)
+
+// Points: each correct answer gives PER_CORRECT; finishing all questions gives FINISH_BONUS even if all are wrong.
+// 3 correct = 3 x 0.25 + 0.25 = 1 Ambosh for the day.
+const PER_CORRECT = 0.25;
+const FINISH_BONUS = 0.25;
+const QUESTIONS_PER_DAY = 3;
+// Points for question number i (0,1,2): the bonus is added together with the last question's points
+const pointsFor = (right, i) => right * PER_CORRECT + (i === QUESTIONS_PER_DAY - 1 ? FINISH_BONUS : 0);
 
 let mode = "signin";
 let user = null;
@@ -343,7 +351,6 @@ async function saveAnswer() {
   try {
     if (!pickSaved) {
       const fresh = data.pDay !== today;
-      const playedBefore = !!(data.pDay || data.lastDay);   // had a "last played" day before today
       const picks = fresh ? [chosen] : [...(data.picks || []), chosen];
       const patch = fresh
         ? { pDay: today, pCount: 1, picks, pScore: 0, pPaid: 0 }
@@ -352,22 +359,6 @@ async function saveAnswer() {
       data.pDay = today; data.pCount = patch.pCount; data.picks = picks;
       if (fresh) { data.pScore = 0; data.pPaid = 0; }
       pickSaved = true;
-      if (fresh) {
-        // Count this as one more day played. Separate write, so if the rules reject it the quiz still works.
-        try {
-          if (data.daysPlayed === undefined) {
-            // First time counting: an earlier day was already played but never counted, so start at 1 + today
-            const start = playedBefore ? 2 : 1;
-            await updateDoc(ref, { daysPlayed: start });
-            data.daysPlayed = start;
-          } else {
-            await updateDoc(ref, { daysPlayed: increment(1) });
-            data.daysPlayed = data.daysPlayed + 1;
-          }
-        } catch (e) {
-          console.error("Could not count the day played:", e);
-        }
-      }
     }
     if (correctIdx === null) correctIdx = await fetchAnswer(today, qi);
     document.querySelectorAll(".opt").forEach((b) => {
@@ -376,10 +367,11 @@ async function saveAnswer() {
       else if (i === chosen) b.classList.add("bad");
     });
     if (!credited) {
-      const gain = chosen === correctIdx ? 1 : 0;
-      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + gain, pPaid: (data.pPaid || 0) + 1 });
+      const right = chosen === correctIdx ? 1 : 0;
+      const gain = pointsFor(right, qi);
+      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + right, pPaid: (data.pPaid || 0) + 1 });
       data.ambosh = (data.ambosh || 0) + gain;
-      data.pScore = (data.pScore || 0) + gain;
+      data.pScore = (data.pScore || 0) + right;
       data.pPaid = (data.pPaid || 0) + 1;
       score = data.pScore;
       credited = true;
@@ -393,16 +385,18 @@ async function saveAnswer() {
   }
   saved = true;
   $("ambosh").textContent = ar(data.ambosh);
+  const last = qi === set.qs.length - 1;
+  const bonusNote = last ? ` (+${ar(FINISH_BONUS)} for finishing today's questions)` : "";
   if (chosen === correctIdx) {
-    m.textContent = "🎉 Correct! +1 Ambosh";
+    m.textContent = `🎉 Correct! +${ar(PER_CORRECT)} Ambosh` + bonusNote;
   } else {
     m.textContent = "Unfortunately not right. The correct answer is: ";
     const ans = document.createElement("bdi");
     ans.dir = "rtl";
     ans.textContent = set.qs[qi].o[correctIdx];
     m.appendChild(ans);
+    if (last) m.append(` +${ar(FINISH_BONUS)} Ambosh for finishing today's questions`);
   }
-  const last = qi === set.qs.length - 1;
   $("nextBtn").textContent = last ? "See my result" : "Next question ➜";
   $("nextBtn").hidden = false;
 }
@@ -414,10 +408,11 @@ async function settlePending() {
     while ((data.pPaid || 0) < (data.pCount || 0) && (data.picks || []).length === data.pCount) {
       const i = data.pPaid || 0;
       const a = await fetchAnswer(data.pDay, i);
-      const gain = data.picks[i] === a ? 1 : 0;
-      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + gain, pPaid: i + 1 });
+      const right = data.picks[i] === a ? 1 : 0;
+      const gain = pointsFor(right, i);
+      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + right, pPaid: i + 1 });
       data.ambosh = (data.ambosh || 0) + gain;
-      data.pScore = (data.pScore || 0) + gain;
+      data.pScore = (data.pScore || 0) + right;
       data.pPaid = i + 1;
     }
   } catch (e) {
@@ -435,7 +430,8 @@ function showResult(justPlayed) {
   const s = data.pDay === today ? (data.pScore || 0) : (data.lastScore || 0);
   $("trophy").textContent = s === 3 ? "🏆" : s > 0 ? "⭐" : "📖";
   $("resultTitle").textContent = justPlayed ? `You got ${s} of 3!` : "You finished today's quiz ✅";
-  $("resultSub").innerHTML = (justPlayed ? `You earned ${s} Ambosh today.` : `Today's score: ${s} of 3`) +
+  const earned = s * PER_CORRECT + FINISH_BONUS;   // finishing always counts, even with 0 correct
+  $("resultSub").innerHTML = (justPlayed ? `You earned ${ar(earned)} Ambosh today.` : `Today's score: ${s} of 3 · ${ar(earned)} Ambosh`) +
     `<br>Total: <b>${ar(data.ambosh || 0)} Ambosh</b> 🪙<br>Come back tomorrow for new questions! 🌅`;
   show("resultView");
 }
@@ -469,7 +465,7 @@ async function loadAdmin() {
 
 function updateAdminSub(list) {
   const total = list.reduce((s, u) => s + (Number(u.ambosh) || 0), 0);
-  $("adminSub").textContent = list.length ? `${list.length} accounts · ${total} Ambosh in total` : "No accounts yet.";
+  $("adminSub").textContent = list.length ? `${list.length} accounts · ${ar(total)} Ambosh in total` : "No accounts yet.";
 }
 
 function renderAdmin() {
@@ -489,11 +485,8 @@ function renderAdmin() {
     plus.onclick = () => adjustAmbosh(u, 1, c3, [minus, plus]);
     c4.style.direction = "ltr";
     c4.append(plus, minus);   // + on the left, − on the right
-    // Children who played before this counter existed show at least 1 if they have ever played
-    const played = u.daysPlayed !== undefined ? Number(u.daysPlayed) || 0 : ((u.pDay || u.lastDay) ? 1 : 0);
-    const c5 = document.createElement("td"); c5.innerHTML = `<b>${ar(played)}</b>`;
-    const c6 = document.createElement("td"); c6.textContent = u.pDay || u.lastDay || "—";
-    tr.append(c1, c2, c3, c4, c5, c6);
+    const c5 = document.createElement("td"); c5.textContent = u.pDay || u.lastDay || "—";
+    tr.append(c1, c2, c3, c4, c5);
     rows.appendChild(tr);
   });
   updateAdminSub(list);
