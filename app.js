@@ -7,8 +7,8 @@ import {
   getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, increment,
   collection, query, orderBy, getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { ROSTER, CLASSES } from "./roster.js";
-import { parseReadings } from "./readings.js";
+import { ROSTER, CLASSES } from "./roster.js?v=8";
+import { parseReadings } from "./readings.js?v=8";
 
 /* ============ 1) PASTE YOUR FIREBASE SETTINGS HERE ============ */
 const firebaseConfig = {
