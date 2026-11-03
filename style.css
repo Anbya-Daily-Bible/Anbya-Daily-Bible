@@ -122,3 +122,8 @@ button.toggle { margin: 10px 0; }
 /* Logo */
 .brand { display: flex; justify-content: center; margin: 4px 0 10px; }
 .brand img { height: 110px; width: auto; display: block; }
+/* Teacher preview ("What they see") */
+.preview-banner {
+  background: #fff3cd; color: #7a5b00; border: 2px solid #ffe08a; border-radius: 14px;
+  padding: 10px 14px; margin: 0 0 12px; font-weight: 700; text-align: center;
+}
