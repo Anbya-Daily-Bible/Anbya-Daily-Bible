@@ -60,6 +60,11 @@ const QUESTIONS_PER_DAY = 3;
 // Points for question number i (0,1,2): the bonus is added together with the last question's points
 const pointsFor = (right, i) => right * PER_CORRECT + (i === QUESTIONS_PER_DAY - 1 ? FINISH_BONUS : 0);
 
+// Only this teacher gets the "What they see" button (the page just hides it for the others).
+const PREVIEW_EMAIL = "pierre2006hany@gmail.com";
+let preview = false;        // true while the teacher is looking at the children's view
+let previewDayStr = "";
+
 let mode = "signin";
 let user = null;
 let data = null;            // the child's saved document
@@ -255,6 +260,7 @@ $("toggleDays").onclick = () => {
 onAuthStateChanged(auth, async (u) => {
   user = u;
   if (!u) {
+    preview = false; setPreviewUI(false);
     $("password").value = ""; $("ownerPassword").value = "";
     $("password").type = "password"; $("ownerPassword").type = "password";   // hide again after sign out
     $("pwToggle").classList.remove("on"); $("ownerPwToggle").classList.remove("on");
@@ -313,7 +319,7 @@ function showQuestion() {
   const q = set.qs[qi];
   answered = false;
   $("qCount").textContent = `Question ${qi + 1} of ${set.qs.length}`;
-  $("ambosh").textContent = ar(data.ambosh || 0);
+  if (!preview) $("ambosh").textContent = ar(data.ambosh || 0);
   $("ref").textContent = `📖 ${set.ref}`;
   $("verse").textContent = q.q;
   $("msg").textContent = "";
@@ -336,6 +342,7 @@ let saved = true, chosen = -1, pickSaved = false, correctIdx = null, credited = 
 async function pick(idx) {
   if (answered) return;          // each question can only be answered once
   answered = true;
+  if (preview) return previewPick(idx);   // the teacher's preview never saves anything
   chosen = idx; pickSaved = false; correctIdx = null; credited = false;
   await saveAnswer();
 }
@@ -421,6 +428,7 @@ async function settlePending() {
 }
 
 $("nextBtn").onclick = () => {
+  if (preview) return previewNext();
   if (!saved) return saveAnswer();
   if (qi < set.qs.length - 1) { qi++; return showQuestion(); }
   showResult(true);
@@ -437,6 +445,68 @@ function showResult(justPlayed) {
 }
 function showDone() { showResult(false); }
 
+/* ---------- Teacher preview: "What they see" (nothing is saved, no points) ---------- */
+function setPreviewUI(on) {
+  document.querySelectorAll(".previewOnly").forEach((el) => (el.hidden = !on));
+  document.querySelector("#quizView .coin").hidden = on;      // no Ambosh counter in the preview
+}
+
+$("previewBtn").onclick = async () => {
+  const day = $("previewDay").value || todayStr();
+  const m = $("previewMsg");
+  m.className = "msg";
+  m.textContent = "Loading...";
+  $("previewBtn").disabled = true;
+  const z = await fetchSet(day);
+  $("previewBtn").disabled = false;
+  if (!z || !z.qs || !z.qs.length) { m.className = "err"; m.textContent = `No questions are scheduled for ${day}.`; return; }
+  m.textContent = "";
+  preview = true; previewDayStr = day;
+  set = z; qi = 0;
+  setPreviewUI(true);
+  showQuestion();
+};
+
+async function previewPick(idx) {
+  chosen = idx;
+  const m = $("msg");
+  m.textContent = "...";
+  let right = null;
+  try { right = await fetchAnswer(previewDayStr, qi); }
+  catch (e) { console.error("Preview: could not read the answer", e); }
+  document.querySelectorAll(".opt").forEach((b) => {
+    const i = Number(b.dataset.idx);
+    if (i === right) b.classList.add("good");
+    else if (i === chosen) b.classList.add("bad");
+  });
+  if (right === null) {
+    m.textContent = "Could not read the correct answer for this question.";
+  } else if (chosen === right) {
+    m.textContent = "🎉 Correct! (preview: no Ambosh given)";
+  } else {
+    m.textContent = "Unfortunately not right. The correct answer is: ";
+    const ans = document.createElement("bdi");
+    ans.dir = "rtl";
+    ans.textContent = set.qs[qi].o[right];
+    m.appendChild(ans);
+  }
+  const last = qi === set.qs.length - 1;
+  $("nextBtn").textContent = last ? "See my result" : "Next question ➜";
+  $("nextBtn").hidden = false;
+}
+
+function previewNext() {
+  if (qi < set.qs.length - 1) { qi++; return showQuestion(); }
+  $("trophy").textContent = "👀";
+  $("resultTitle").textContent = "End of preview";
+  $("resultSub").innerHTML = "This is where the child sees their score.<br>Nothing was saved and no Ambosh was given.";
+  show("resultView");
+}
+
+document.querySelectorAll(".previewBack").forEach((b) => {
+  b.onclick = () => { preview = false; setPreviewUI(false); set = null; show("adminView"); };
+});
+
 /* ---------- Owner: only sees the points, gets no questions ---------- */
 let adminUsers = [];
 const ADJUST_STEP = 5;   // each + or − changes the points by this much
@@ -444,6 +514,9 @@ fillSelect($("adminClass"), "All classes", CLASSES.map((c) => [c, c]));
 $("adminClass").onchange = renderAdmin;
 
 async function loadAdmin() {
+  const canPreview = !!(user && (user.email || "").toLowerCase() === PREVIEW_EMAIL);
+  $("previewCard").hidden = !canPreview;
+  if (canPreview && !$("previewDay").value) $("previewDay").value = todayStr();
   $("adminRows").innerHTML = "";
   $("adminSub").textContent = "Loading...";
   $("adjMsg").textContent = "";
