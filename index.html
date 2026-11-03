@@ -77,6 +77,7 @@
   </section>
 
   <section id="quizView" hidden>
+    <p class="preview-banner previewOnly" hidden>👀 Preview only: nothing is saved and no Ambosh is given.</p>
     <div class="bar">
       <span id="qCount"></span>
       <span class="coin">🪙 <span id="ambosh">0</span> Ambosh</span>
@@ -88,6 +89,7 @@
       <div id="msg" class="msg"></div>
       <button id="nextBtn" class="full" hidden></button>
     </div>
+    <p class="center previewOnly" hidden><button class="link previewBack">← Back to the teacher page</button></p>
   </section>
 
   <section id="resultView" hidden>
@@ -96,11 +98,20 @@
       <h1 id="resultTitle"></h1>
       <p id="resultSub" class="sub"></p>
     </div>
+    <p class="center previewOnly" hidden><button class="link previewBack">← Back to the teacher page</button></p>
   </section>
 
   <section id="adminView" hidden>
     <h1>🪙 Anbya's Ambosh</h1>
     <p id="adminSub" class="sub"></p>
+    <div id="previewCard" class="card" hidden>
+      <p class="hint">See the questions and choices exactly like the children see them. You can answer, but nothing is saved and no Ambosh is given.</p>
+      <label for="previewDay">Day</label>
+      <input id="previewDay" type="date">
+      <div id="previewMsg" class="msg"></div>
+      <button id="previewBtn" class="full" type="button">👀 What they see</button>
+    </div>
+    <br>
     <div class="card">
       <h2>📗 Upload the readings (Excel)</h2>
       <p class="hint">Fill in <b>ReadingsInput.xlsx</b> (one row for each day), then choose the file here and press Upload. The children will see each day's questions on its date. Uploading a day again replaces it.</p>
@@ -133,6 +144,6 @@
   </p>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=8"></script>
+<script type="module" src="app.js?v=9"></script>
 </body>
 </html>
