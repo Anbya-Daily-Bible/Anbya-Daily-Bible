@@ -58,6 +58,19 @@ const PER_CORRECT = 0.25;
 const FINISH_BONUS = 0.25;
 const QUESTIONS_PER_DAY = 3;
 // Points for question number i (0,1,2): the bonus is added together with the last question's points
+// Paying for question i. On the last question the child has finished the day, so "daysDone" goes up by 1.
+// If the Firestore rules do not know "daysDone" yet, we retry without it so children are never blocked.
+async function creditPick(ref, i, gain, right, pScore, pPaid) {
+  const base = { ambosh: increment(gain), pScore, pPaid };
+  if (i !== QUESTIONS_PER_DAY - 1) { await updateDoc(ref, base); return false; }
+  try {
+    await updateDoc(ref, { ...base, daysDone: increment(1) });
+    return true;
+  } catch (e) {
+    if (e && e.code === "permission-denied") { await updateDoc(ref, base); return false; }
+    throw e;
+  }
+}
 const pointsFor = (right, i) => right * PER_CORRECT + (i === QUESTIONS_PER_DAY - 1 ? FINISH_BONUS : 0);
 
 // Only this teacher gets the "What they see" button (the page just hides it for the others).
@@ -376,7 +389,8 @@ async function saveAnswer() {
     if (!credited) {
       const right = chosen === correctIdx ? 1 : 0;
       const gain = pointsFor(right, qi);
-      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + right, pPaid: (data.pPaid || 0) + 1 });
+      const counted = await creditPick(ref, qi, gain, right, (data.pScore || 0) + right, (data.pPaid || 0) + 1);
+      if (counted) data.daysDone = (data.daysDone || 0) + 1;
       data.ambosh = (data.ambosh || 0) + gain;
       data.pScore = (data.pScore || 0) + right;
       data.pPaid = (data.pPaid || 0) + 1;
@@ -417,7 +431,8 @@ async function settlePending() {
       const a = await fetchAnswer(data.pDay, i);
       const right = data.picks[i] === a ? 1 : 0;
       const gain = pointsFor(right, i);
-      await updateDoc(ref, { ambosh: increment(gain), pScore: (data.pScore || 0) + right, pPaid: i + 1 });
+      const counted = await creditPick(ref, i, gain, right, (data.pScore || 0) + right, i + 1);
+      if (counted) data.daysDone = (data.daysDone || 0) + 1;
       data.ambosh = (data.ambosh || 0) + gain;
       data.pScore = (data.pScore || 0) + right;
       data.pPaid = i + 1;
@@ -559,7 +574,10 @@ function renderAdmin() {
     c4.style.direction = "ltr";
     c4.append(plus, minus);   // + on the left, − on the right
     const c5 = document.createElement("td"); c5.textContent = u.pDay || u.lastDay || "—";
-    tr.append(c1, c2, c3, c4, c5);
+    // Days the child finished all 3 questions (counting started when this feature was added)
+    const c6 = document.createElement("td");
+    c6.innerHTML = u.daysDone === undefined ? "—" : `<b>${ar(Number(u.daysDone) || 0)}</b>`;
+    tr.append(c1, c2, c3, c4, c5, c6);
     rows.appendChild(tr);
   });
   updateAdminSub(list);
