@@ -75,6 +75,9 @@ const pointsFor = (right, i) => right * PER_CORRECT + (i === QUESTIONS_PER_DAY -
 
 // Only this teacher gets the "What they see" button (the page just hides it for the others).
 const PREVIEW_EMAIL = "pierre2006hany@gmail.com";
+// Only this teacher can give or take away Ambosh (+ / −). Must match isAdjuster() in firestore.rules.
+const ADJUSTER_EMAIL = "pierre2006hany@gmail.com";
+const canAdjust = () => !!(user && (user.email || "").toLowerCase() === ADJUSTER_EMAIL);
 let preview = false;        // true while the teacher is looking at the children's view
 let previewDayStr = "";
 
@@ -529,6 +532,10 @@ fillSelect($("adminClass"), "All classes", CLASSES.map((c) => [c, c]));
 $("adminClass").onchange = renderAdmin;
 
 async function loadAdmin() {
+  const adj = canAdjust();
+  $("adjTitle").textContent = adj ? "🪙 Give or take Ambosh" : "🪙 Ambosh by class";
+  $("adjHint").hidden = !adj;
+  $("thAdjust").hidden = !adj;
   const canPreview = !!(user && (user.email || "").toLowerCase() === PREVIEW_EMAIL);
   $("previewCard").hidden = !canPreview;
   if (canPreview && !$("previewDay").value) $("previewDay").value = todayStr();
@@ -577,14 +584,16 @@ function renderAdmin() {
     // Days the child finished all 3 questions (counting started when this feature was added)
     const c6 = document.createElement("td");
     c6.innerHTML = u.daysDone === undefined ? "—" : `<b>${ar(Number(u.daysDone) || 0)}</b>`;
-    tr.append(c1, c2, c3, c4, c5, c6);
+    if (canAdjust()) tr.append(c1, c2, c3, c4, c5, c6);
+    else tr.append(c1, c2, c3, c5, c6);          // other teachers see no + / − buttons
     rows.appendChild(tr);
   });
   updateAdminSub(list);
 }
 
-// Teacher gives (+) or takes away (-) Ambosh. The Firestore rules only let the owner change 'ambosh'.
+// Teacher gives (+) or takes away (-) Ambosh. The Firestore rules only let ADJUSTER_EMAIL change 'ambosh'.
 async function adjustAmbosh(u, sign, cell, btns) {
+  if (!canAdjust()) return;                      // only the allowed teacher (the rules enforce this too)
   const m = $("adjMsg");
   m.className = "msg";
   const amt = ADJUST_STEP;
