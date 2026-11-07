@@ -41,7 +41,8 @@ const OWNER_EMAILS = [
   "sherysafwat40@gmail.com",
   "atefbeshoy69@gmail.com",
   "arsanymaher03@gmail.com",
-  "fadyhany2007@gmail.com"
+  "fadyhany2007@gmail.com",
+  "yolahanna003@gmail.com"
 ].map((e) => e.toLowerCase());
 /* =============================================================== */
 
