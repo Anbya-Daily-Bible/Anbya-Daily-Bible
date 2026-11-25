@@ -577,8 +577,9 @@ function renderAdmin() {
     const c3 = document.createElement("td"); c3.innerHTML = `<b>${ar(Number(u.ambosh) || 0)}</b>`;
     const c4 = document.createElement("td");
     const amt = document.createElement("input");
-    amt.type = "number"; amt.className = "amt"; amt.min = "0.01"; amt.max = String(ADJUST_MAX); amt.step = "0.25";
-    amt.value = String(ADJUST_DEFAULT); amt.inputMode = "decimal"; amt.title = "How many Ambosh? (decimals allowed, like 0.25)";
+    amt.type = "text"; amt.className = "amt";
+    amt.value = String(ADJUST_DEFAULT); amt.inputMode = "decimal"; amt.autocomplete = "off";
+    amt.title = "How many Ambosh? (decimals allowed, like 0.25)";
     amt.setAttribute("aria-label", "Amount of Ambosh");
     const minus = document.createElement("button"); minus.className = "pm minus"; minus.textContent = "−"; minus.title = "Take away this amount";
     const plus = document.createElement("button"); plus.className = "pm plus"; plus.textContent = "+"; plus.title = "Give this amount";
@@ -597,13 +598,22 @@ function renderAdmin() {
   updateAdminSub(list);
 }
 
+// Accepts 0.25, 0,25, ٠٫٢٥ (Arabic digits and Arabic decimal marks) and returns a number, or NaN
+const parseAmount = (s) => {
+  s = String(s).trim()
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+    .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d))
+    .replace(/[٫,،]/g, ".");
+  return /^\d+(\.\d*)?$|^\.\d+$/.test(s) ? Number(s) : NaN;
+};
+
 // Teacher gives (+) or takes away (-) Ambosh. The Firestore rules only let ADJUSTER_EMAIL change 'ambosh'.
 async function adjustAmbosh(u, sign, cell, btns, amtInput) {
   if (!canAdjust()) return;                      // only the allowed teacher (the rules enforce this too)
   const m = $("adjMsg");
   m.className = "msg";
   const round2 = (n) => Math.round(n * 100) / 100;   // keeps 2 decimals, avoids 0.30000000000000004
-  const amt = round2(Number(String(amtInput.value).replace(",", ".")));   // also accepts 0,25
+  const amt = round2(parseAmount(amtInput.value));
   if (!Number.isFinite(amt) || amt <= 0 || amt > ADJUST_MAX) {
     m.className = "err";
     m.textContent = `Type a number from 0.01 to ${ADJUST_MAX} (for example 0.25).`;
