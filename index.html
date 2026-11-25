@@ -17,7 +17,7 @@
 <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js">
 <link rel="modulepreload" href="roster.js?v=8">
 <link rel="modulepreload" href="readings.js?v=8">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <main>
@@ -128,7 +128,7 @@
       <label for="adminClass">Show class</label>
       <select id="adminClass" class="ar"></select>
       <div id="adjMsg" class="msg"></div>
-      <p id="adjHint" class="hint">Type how many Ambosh in the box (1 to 100), then tap <b>+</b> to give them or <b>−</b> to take them away (a child never goes below 0).</p>
+      <p id="adjHint" class="hint">Type how many Ambosh in the box (from 0.01 to 100, for example <b>0.25</b>), then tap <b>+</b> to give them or <b>−</b> to take them away (a child never goes below 0).</p>
     </div>
     <br>
     <div class="card scroll">
@@ -145,6 +145,6 @@
   </p>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script type="module" src="app.js?v=12"></script>
+<script type="module" src="app.js?v=13"></script>
 </body>
 </html>
