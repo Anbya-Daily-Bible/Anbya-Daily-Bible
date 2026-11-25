@@ -577,8 +577,8 @@ function renderAdmin() {
     const c3 = document.createElement("td"); c3.innerHTML = `<b>${ar(Number(u.ambosh) || 0)}</b>`;
     const c4 = document.createElement("td");
     const amt = document.createElement("input");
-    amt.type = "number"; amt.className = "amt"; amt.min = "1"; amt.max = String(ADJUST_MAX); amt.step = "1";
-    amt.value = String(ADJUST_DEFAULT); amt.inputMode = "numeric"; amt.title = "How many Ambosh?";
+    amt.type = "number"; amt.className = "amt"; amt.min = "0.01"; amt.max = String(ADJUST_MAX); amt.step = "0.25";
+    amt.value = String(ADJUST_DEFAULT); amt.inputMode = "decimal"; amt.title = "How many Ambosh? (decimals allowed, like 0.25)";
     amt.setAttribute("aria-label", "Amount of Ambosh");
     const minus = document.createElement("button"); minus.className = "pm minus"; minus.textContent = "−"; minus.title = "Take away this amount";
     const plus = document.createElement("button"); plus.className = "pm plus"; plus.textContent = "+"; plus.title = "Give this amount";
@@ -602,10 +602,11 @@ async function adjustAmbosh(u, sign, cell, btns, amtInput) {
   if (!canAdjust()) return;                      // only the allowed teacher (the rules enforce this too)
   const m = $("adjMsg");
   m.className = "msg";
-  const amt = Math.floor(Number(amtInput.value));
-  if (!Number.isFinite(amt) || amt < 1 || amt > ADJUST_MAX) {
+  const round2 = (n) => Math.round(n * 100) / 100;   // keeps 2 decimals, avoids 0.30000000000000004
+  const amt = round2(Number(String(amtInput.value).replace(",", ".")));   // also accepts 0,25
+  if (!Number.isFinite(amt) || amt <= 0 || amt > ADJUST_MAX) {
     m.className = "err";
-    m.textContent = `Type a whole number from 1 to ${ADJUST_MAX}.`;
+    m.textContent = `Type a number from 0.01 to ${ADJUST_MAX} (for example 0.25).`;
     amtInput.focus();
     return;
   }
@@ -615,12 +616,12 @@ async function adjustAmbosh(u, sign, cell, btns, amtInput) {
   btns.forEach((b) => (b.disabled = true));
   try {
     await updateDoc(doc(db, "users", u.id), { ambosh: increment(delta) });
-    u.ambosh = cur + delta;
+    u.ambosh = round2(cur + delta);
     cell.innerHTML = `<b>${ar(u.ambosh)}</b>`;
     updateAdminSub(adminUsers.filter((x) => !$("adminClass").value || x.cls === $("adminClass").value));
     m.textContent = "";
     const name = document.createElement("bdi"); name.textContent = u.name || u.email;
-    m.append(delta > 0 ? `✅ Gave ${delta} Ambosh to ` : `✅ Took ${-delta} Ambosh from `, name, ` — now ${u.ambosh}`);
+    m.append(delta > 0 ? `✅ Gave ${ar(delta)} Ambosh to ` : `✅ Took ${ar(-delta)} Ambosh from `, name, ` — now ${ar(u.ambosh)}`);
   } catch (e) {
     console.error("Adjust failed:", e);
     m.className = "err";
