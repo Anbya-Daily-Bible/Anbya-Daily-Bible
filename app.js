@@ -528,7 +528,8 @@ document.querySelectorAll(".previewBack").forEach((b) => {
 
 /* ---------- Owner: only sees the points, gets no questions ---------- */
 let adminUsers = [];
-const ADJUST_STEP = 5;   // each + or − changes the points by this much
+const ADJUST_DEFAULT = 5;   // the amount box starts with this number
+const ADJUST_MAX = 100;     // must match the limit in firestore.rules
 fillSelect($("adminClass"), "All classes", CLASSES.map((c) => [c, c]));
 $("adminClass").onchange = renderAdmin;
 
@@ -575,12 +576,16 @@ function renderAdmin() {
     const c2 = document.createElement("td"); c2.className = "cls"; c2.textContent = u.cls || "—";
     const c3 = document.createElement("td"); c3.innerHTML = `<b>${ar(Number(u.ambosh) || 0)}</b>`;
     const c4 = document.createElement("td");
-    const minus = document.createElement("button"); minus.className = "pm minus"; minus.textContent = "−"; minus.title = "Take away 5";
-    const plus = document.createElement("button"); plus.className = "pm plus"; plus.textContent = "+"; plus.title = "Give 5";
-    minus.onclick = () => adjustAmbosh(u, -1, c3, [minus, plus]);
-    plus.onclick = () => adjustAmbosh(u, 1, c3, [minus, plus]);
+    const amt = document.createElement("input");
+    amt.type = "number"; amt.className = "amt"; amt.min = "1"; amt.max = String(ADJUST_MAX); amt.step = "1";
+    amt.value = String(ADJUST_DEFAULT); amt.inputMode = "numeric"; amt.title = "How many Ambosh?";
+    amt.setAttribute("aria-label", "Amount of Ambosh");
+    const minus = document.createElement("button"); minus.className = "pm minus"; minus.textContent = "−"; minus.title = "Take away this amount";
+    const plus = document.createElement("button"); plus.className = "pm plus"; plus.textContent = "+"; plus.title = "Give this amount";
+    minus.onclick = () => adjustAmbosh(u, -1, c3, [minus, plus], amt);
+    plus.onclick = () => adjustAmbosh(u, 1, c3, [minus, plus], amt);
     c4.style.direction = "ltr";
-    c4.append(plus, minus);   // + on the left, − on the right
+    c4.append(plus, amt, minus);   // + on the left, amount in the middle, − on the right
     const c5 = document.createElement("td"); c5.textContent = u.pDay || u.lastDay || "—";
     // Days the child finished all 3 questions (counting started when this feature was added)
     const c6 = document.createElement("td");
@@ -593,11 +598,17 @@ function renderAdmin() {
 }
 
 // Teacher gives (+) or takes away (-) Ambosh. The Firestore rules only let ADJUSTER_EMAIL change 'ambosh'.
-async function adjustAmbosh(u, sign, cell, btns) {
+async function adjustAmbosh(u, sign, cell, btns, amtInput) {
   if (!canAdjust()) return;                      // only the allowed teacher (the rules enforce this too)
   const m = $("adjMsg");
   m.className = "msg";
-  const amt = ADJUST_STEP;
+  const amt = Math.floor(Number(amtInput.value));
+  if (!Number.isFinite(amt) || amt < 1 || amt > ADJUST_MAX) {
+    m.className = "err";
+    m.textContent = `Type a whole number from 1 to ${ADJUST_MAX}.`;
+    amtInput.focus();
+    return;
+  }
   const cur = Number(u.ambosh) || 0;
   const delta = sign > 0 ? amt : -Math.min(amt, cur);   // never below 0
   if (delta === 0) { m.textContent = (u.name || "This child") + " already has 0 Ambosh."; return; }
